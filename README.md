@@ -11,8 +11,9 @@
 </p>
 
 > [!NOTE]
-> **Status: design stage (November 2026).** No code yet: this repo holds the plan. Start with
-> [docs/vision.md](docs/vision.md), then [docs/iteration-1.md](docs/iteration-1.md).
+> **Status: building v0.1 (November 2026).** No release yet. The plan is
+> [docs/vision.md](docs/vision.md) → [docs/iteration-1.md](docs/iteration-1.md) →
+> [docs/plan-v0.1.md](docs/plan-v0.1.md) (the task-by-task build plan).
 
 ## The idea
 
@@ -44,6 +45,7 @@ The chief spends its tokens on judgment. Your GPUs do the volume.
 |---|---|
 | [docs/vision.md](docs/vision.md) | why, principles, vocabulary, what's borrowed from localdub, roadmap |
 | [docs/iteration-1.md](docs/iteration-1.md) | the first build: scope, architecture, milestones M0–M5 |
+| [docs/plan-v0.1.md](docs/plan-v0.1.md) | v0.1 task by task (T01–T16): contracts, files, acceptance commands, for people and agents |
 | [docs/cli.md](docs/cli.md) | the `ork` CLI and MCP contract: commands, orders, reports, events, exit codes |
 | [docs/agent-loop.md](docs/agent-loop.md) | what an agent loop is, one turn on the wire, how the grunt's loop works, a learning path |
 | [docs/swarm.md](docs/swarm.md) | where it goes next: tiers, plans, parallel grunts, verifiers, merge queue |

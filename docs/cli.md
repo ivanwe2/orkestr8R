@@ -3,32 +3,41 @@
 Draft, 2026-11-23. This is a contract: agents, scripts, the MCP server and the web UI all depend on
 it. Change it in the same PR as the code.
 
-## Commands (iteration 1)
+## Commands
+
+### v0.1
 
 ```
-ork init                                   config, delegation rules for AGENTS.md / CLAUDE.md, MCP registration snippets
-ork doctor                                 is everything in place? (server, tool calling, git, allow-listed commands)
-ork models                                 which model does each role, on which server
-          [--set ROLE=SERVER/MODEL] [--test ROLE]
-ork models --server NAME --url URL [--key-stdin] [--remove]
-                                           add or change a server (any OpenAI-compatible one)
+ork init --url URL --model MODEL [--key-env VAR] [--context-tokens N] [--user] [--force]
+                                           write ork.json (the repo's, or the user's with --user); add .ork/ to .git/info/exclude
+ork doctor                                 is everything in place? (config, git, server, tool calling, allow-listed commands)
+ork models [--test]                        which model does each role, on which server; --test sends a tiny request
 ork ask "QUESTION" --path FILE [--path …]  a one-shot, read-only answer from the local model
-ork run ORDER.json                         run one order: worktree, grunt loop, checks, report
-ork run --goal "…" --scope GLOB --check "CMD" [--path FILE] [--max-turns N] [--detach]
-                                           the same with the order on the command line
+ork run [ORDER.json] [--goal "…"] [--context "…"] [--path FILE]… [--scope GLOB]… [--check "CMD"]…
+        [--readonly] [--max-turns N] [--max-repairs N] [--max-minutes N]
+                                           run one order: worktree, grunt loop, checks, report (flags override the file)
 ork jobs                                   every job, newest first
-ork status JOB                             one job: status, and the report when done
-ork watch JOB                              follow a job's events live
+ork status JOB                             one job: status, the last event while running, the report when done
 ork diff JOB [--stat]                      the job's changes
-ork apply JOB [--squash]                   merge the job's branch into the current branch
-ork discard JOB                            drop the worktree and the branch
 ork logs JOB                               the transcript: every message to and from the model
-ork mcp                                    the MCP server over stdio
+ork apply JOB [--squash] [--force]         merge the job's branch into the current branch, then clean up
+ork discard JOB                            drop the worktree and the branch
 ork guide                                  the guide for AI agents (this file is the one for people)
 ```
 
-`ork run` blocks until the job ends. With `--detach` it prints the job id and returns; `watch`,
-`status` and `apply` take it from there.
+In v0.1, `ork run` blocks until the job ends. An agent whose shell tool has a time limit starts it
+in the background, reads the job id from the first line, and polls `ork status JOB --json`.
+
+### Planned
+
+```
+ork run … --detach                         (v0.2) start in the background, print the job id
+ork watch JOB                              (v0.2) follow a job's events live
+ork mcp                                    (v0.2) the MCP server over stdio
+ork init                                   (v0.2) also writes delegation rules for AGENTS.md / CLAUDE.md and MCP registration snippets
+ork models --set ROLE=SERVER/MODEL         (later) change a role's model
+ork models --server NAME --url URL [--key-env VAR] [--remove]
+                                           (later) add, change or remove a server
 
 ## Exit codes
 
@@ -36,7 +45,7 @@ ork guide                                  the guide for AI agents (this file is
 |---|---|
 | 0 | done (for `run`: checks passed) |
 | 1 | error (bad order, server down, git trouble) |
-| 3 | waiting for a human (e.g. an order marked `approve: true` waits before `apply`) |
+| 3 | waiting for a human (reserved in v0.1; later e.g. an order that needs approval before `apply`, or a grunt's open question) |
 | 4 | finished, but the checks failed or the grunt gave up; the report says which |
 
 ## `--json`
@@ -65,7 +74,7 @@ line, and the last line is always `result`.
 | `check` | every check: command, exit code, seconds, last lines |
 | `repair` | a repair turn starts |
 | `warning` | e.g. a malformed tool call, a truncated output, a think block stripped |
-| `result` | always last: `status` (`passed`, `failed_checks`, `gave_up`, `waiting`, `error`), `exit_code`, and the command's result (`report` for `run`/`status`) |
+| `result` | always last: `status` (`ok`, `passed`, `failed_checks`, `gave_up`, `waiting`, `error`), `exit_code`; then, as needed, `job`, `report` (`run`, `status`), `data` (other commands' output) and `error` (the message, when the status is `error`) |
 
 `call` events add up to the token ledger: what each job cost on which model.
 
@@ -81,14 +90,16 @@ line, and the last line is always `result`.
   "mode": "write",
   "max_turns": 40,
   "max_repairs": 2,
-  "approve": false
+  "max_minutes": 20
 }
 ```
 
-- **Required:** `goal`, `checks` (at least one, unless `mode` is `readonly`).
+- **Required:** `goal`; `checks` (at least one) and `write_scope`, unless `mode` is `readonly`.
+- The limits are optional; the config's defaults fill them in.
+- Every check must pass the command allow-list.
 - **`mode: readonly`** removes every writing tool. Use it for investigations ("find every place
   that…"): the answer comes back in the summary.
-- **Planned for iteration 3** (docs/swarm.md): `id`, `needs`, `tier`.
+- **Planned:** `approve` (v0.2), and `id`, `needs`, `tier` for plans (iteration 3, docs/swarm.md).
 
 ## The report
 

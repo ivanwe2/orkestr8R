@@ -20,19 +20,24 @@ The frontier "chief" (Claude Code, OpenCode) writes orders; orkestr8R runs them 
 agent loop in git worktrees, checks them with real commands and reports back. See README.md and
 docs/vision.md.
 
-## Status
+## Status and what to work on
 
-Design stage, no code yet. The plan lives in `docs/`; the first build is docs/iteration-1.md
-(milestones M0–M5). Decisions and open questions: docs/decisions.md. Keep both up to date when
-something is decided.
+**v0.1 is being built. The work is in docs/plan-v0.1.md: tasks T01–T16, each specified to be done
+without asking.**
+- Take the first unticked task in its Progress list whose dependencies are ticked.
+- One task per branch and PR; tick it in the same PR.
+- If the spec is wrong or unclear, fix the spec in the same PR and say so.
+
+Background: docs/iteration-1.md (milestones M0–M5). Decisions and open questions:
+docs/decisions.md. Keep both up to date when something is decided.
 
 ## Planned layout and conventions
 
 | Path | What |
 |---|---|
 | `src/Orkestr8r.Core/` | the grunt loop, tools, orders and reports, jobs, worktrees, checks, model servers |
-| `src/Orkestr8r.Cli/` | `ork`: every command, `--json` events, `ork mcp` (the MCP server over stdio) |
-| `tests/` | unit tests, and end-to-end runs of the loop against a fake model server |
+| `src/Orkestr8r.Cli/` | `ork`: every command, `--json` events; `ork mcp` (the MCP server over stdio) from v0.2 |
+| `tests/` | unit tests, and end-to-end runs of the loop against a fake model server; `Orkestr8r.TestTool` for process tests |
 | `skills/orkestr8r/SKILL.md` | the Agent Skill that points agents to `ork guide` |
 | `docs/` | the plan and the contracts |
 

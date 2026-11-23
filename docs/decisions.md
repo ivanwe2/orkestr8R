@@ -2,6 +2,32 @@
 
 Newest first. Each line: what was decided, and why. Open questions at the bottom.
 
+## 2026-11-24
+
+- **v0.1 is the CLI with blocking runs** (docs/plan-v0.1.md). Calling `ork` from the shell, with
+  the skill, is the default way in. Running in the background and over MCP comes together in v0.2,
+  since MCP mostly matters for long calls (MCP Tasks).
+- **Model calls use raw `HttpClient` + `System.Text.Json`**, not Microsoft.Extensions.AI or the
+  OpenAI SDK.
+  - The wire JSON stays visible, which is the learning goal.
+  - We get full control over malformed arguments, think blocks, tool calls written into the text,
+    and llama.cpp extras.
+  - It can sit behind `IChatClient` later.
+- **Job state is files in `.ork/jobs/<id>/`, not SQLite.** SQLite only if the v0.2 daemon needs it.
+- **Commands run without a shell.** The command line is split into arguments, allowed by token
+  prefix, and refused if it has shell metacharacters. Checks pass the same policy.
+- **`write_file` only creates new files**; changes to existing files go through `edit_file` (exact
+  match, once). Whole-file rewrites are where local models mangle code.
+- **`.ork/` goes into `.git/info/exclude`**, so the user's `.gitignore` stays untouched.
+- **Tests:**
+  - The CLI runs in-process (`CliApp.RunAsync`).
+  - A fake OpenAI-compatible server (Kestrel on port 0) replies from scripts.
+  - `git grep` is the check command, so tests are fast and the same on Linux and Windows.
+- **The ACP and A2A order.** Handing a task over like a tool call is MCP and the CLI (the agent as a
+  tool). ACP (other harnesses as grunts) comes in iteration 2, A2A only if orkestr8R goes networked
+  (iteration 4). Keep the job model (id, status, events, result, waiting = exit code 3) clean so
+  both map onto it.
+
 ## 2026-11-23
 
 - **Start with coding tasks.** Ivan: any tasks could work, but coding first. Code has tests, so

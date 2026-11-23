@@ -109,10 +109,10 @@ defaults. `ork init` writes it; `ork models` changes it.
   AOT binaries and a Docker image come in iteration 2.
 - MCP: the official C# SDK, `ModelContextProtocol` 2.x (MCP 2026-07-28), with
   `ModelContextProtocol.Extensions.Tasks` for long calls.
-- Model calls: `Microsoft.Extensions.AI` `IChatClient` (or the OpenAI .NET SDK) for the HTTP call
-  only. The loop is ours.
-- `Microsoft.Data.Sqlite` for jobs; git through the `git` command (worktrees, diffs); `System.CommandLine`
-  for the CLI.
+- Model calls: raw `HttpClient` + `System.Text.Json` against the OpenAI-compatible API (decided
+  2026-11-24, see docs/decisions.md). The loop is ours.
+- Job state as files in v0.1; SQLite only if the v0.2 daemon needs it. Git through the `git`
+  command (worktrees, diffs). `System.CommandLine` 2.0 for the CLI.
 
 ## Milestones
 
@@ -124,6 +124,12 @@ defaults. `ork init` writes it; `ork models` changes it.
 | **M3** | Jobs: background jobs, `jobs/status/watch/diff/apply/discard`, SQLite, the MCP tools, MCP Tasks | Claude Code delegates, keeps working, applies the result |
 | **M4** | Agents use it on their own: `ork guide`, the skill, `ork init` (config, delegation rules for AGENTS.md / CLAUDE.md, MCP registration), the guide test | the chief delegates without being told to in the prompt |
 | **M5** | Prove it: 10 real tasks with and without orkestr8R | numbers for chief tokens, grunt pass rate, repairs used, wall-clock time |
+
+**Releases:**
+- **v0.1** = M0 without MCP, plus M1, M2, and the guide and skill from M4. Task by task in
+  **docs/plan-v0.1.md**.
+- **v0.2** = M3 (MCP, background jobs, MCP Tasks) and the rest of M4.
+- **v0.3** = M5.
 
 **Iteration 1 is done** when, on a real feature, the chief writes a plan, delegates at least 3 orders,
 at least 2 of them pass their checks without the chief rewriting them, and nothing was copy-pasted.
