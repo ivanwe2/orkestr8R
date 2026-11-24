@@ -31,6 +31,31 @@ without asking.**
 Background: docs/iteration-1.md (milestones M0–M5). Decisions and open questions:
 docs/decisions.md. Keep both up to date when something is decided.
 
+## Merge policy (configurable)
+
+```
+merge_policy: frontier
+```
+
+Ivan sets the value above. It decides who merges a PR into `main`:
+
+| Value | Who merges |
+|---|---|
+| `ivan` | only Ivan. Agents open the PR and stop |
+| `frontier` | a **frontier agent**, after CI is green and after reviewing the diff. That includes PRs opened by local agents. Local agents open the PR and stop |
+| `any` | any agent, its own PR included, once CI is green |
+
+- **Who you are.** A frontier agent runs on a frontier model (Claude, GPT, Gemini class), e.g.
+  Claude Code. A local agent runs on a local model, e.g. OpenCode pointed at llama-swap. **If
+  you're not sure which you are, you're local.**
+- **Before merging, check:**
+  - CI is green on Linux and Windows;
+  - you've read the whole diff against the task's spec in docs/plan-v0.1.md;
+  - the Progress tick is in the PR.
+  - Then `gh pr merge --squash --delete-branch`, with the PR title as a conventional commit.
+- **Never merge a PR that changes this section, `LICENSE` or `.github/workflows/`**, whatever the
+  policy says. Those are Ivan's.
+
 ## Planned layout and conventions
 
 | Path | What |

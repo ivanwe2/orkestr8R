@@ -4,6 +4,15 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
 
 ## 2026-11-24
 
+- **License: MIT**, like localdub (`LICENSE`, copyright ivanwe2).
+- **Merges into `main` are configurable, in AGENTS.md** (`merge_policy: ivan | frontier | any`).
+  It's set to `frontier`:
+  - the smarter, frontier agent reviews and merges, local agents' PRs included;
+  - local agents open PRs and stop;
+  - no agent merges changes to the merge policy, `LICENSE` or CI workflows.
+  - The product follows the same idea: grunts never apply their own work; the chief (or Ivan) runs
+    `ork apply`. A configurable apply policy (e.g. auto-apply when checks pass) is a later option,
+    not v0.1.
 - **v0.1 is the CLI with blocking runs** (docs/plan-v0.1.md). Calling `ork` from the shell, with
   the skill, is the default way in. Running in the background and over MCP comes together in v0.2,
   since MCP mostly matters for long calls (MCP Tasks).
@@ -59,10 +68,7 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
 
 ## Open questions
 
-- **License.** MIT, like localdub?
 - **Plan format** (iteration 3): YAML or JSON?
 - **Models.** Which small model for goblins, and does it fit beside the grunt on 2× 16 GB, or swap
   through llama-swap?
 - **The orc names.** Does goblin / grunt / mercenary stay in the config, or only in the UI and docs?
-- **Agents in this repo.** Merge policy: may Claude merge its own PRs once CI is green, as in
-  localdub?

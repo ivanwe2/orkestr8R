@@ -12,7 +12,7 @@ OpenCode on Ivan's local model, can pick up one task at a time and finish it wit
    it. If the spec is wrong or unclear, fix the spec in this file in the same PR and say so in the
    PR description.
 4. A task is done when every acceptance command passes, on Linux and Windows CI. Then tick it in
-   Progress, in the same PR.
+   Progress, in the same PR. Who merges follows the merge policy in `AGENTS.md`.
 5. Tasks marked **explain** are the heart of the harness. Ivan wants to learn them, so explain each
    piece as it goes in: what it does, why it's there, and the C# idiom used. Keep it brief, as you
    go.
