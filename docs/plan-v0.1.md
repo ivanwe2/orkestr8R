@@ -33,7 +33,7 @@ task at a time and finish it without asking.
 - [x] T07 Processes and the command policy
 - [x] T08 Git, worktrees and the job store
 - [x] T09 The grunt's tools
-- [ ] T10 The grunt loop
+- [x] T10 The grunt loop
 - [ ] T11 Loop guards and context
 - [ ] T12 Checks, repair turns and the report
 - [ ] T13 `ork run`
@@ -905,31 +905,41 @@ registry; any for the individual tools
   - If something blocks you (missing information, an impossible goal), call finish and put the question
     in open_questions.
   ```
-- **`first_message::render(order, seed)`** → Markdown with these sections:
+- **`first_message::seed(order, ctx)`** gathers a `Seed { files, contents }`: the worktree's
+  `ls_files`, and each of `paths` read through the guard (`None` when it can't be).
+  **`first_message::render(order, &seed)`** → Markdown with these sections:
   - `## Goal`;
   - `## Context` (when given);
-  - `## Files you may change` (the scope);
+  - `## Files you may change` (the scope; a readonly order says so);
   - `## Checks` ("run when you call finish");
-  - `## Repository` (a depth-2 tree from `ls_files`, at most 200 entries);
+  - `## Repository` (a depth-2 tree from `ls_files`, at most 200 entries: `list_dir::render(files,
+    depth, max_entries)`);
   - `## Files` (each of `paths`, numbered, at most 400 lines each and 40,000 characters in total,
-    with "(truncated; use read_file)" when cut).
+    with "(truncated; use read_file)" when cut, "(not found)" when missing).
+- **`FinishHandler`** (Contracts) comes with `AcceptAll`, which accepts every finish.
+- **`LoopSettings::new(order, config, role)`**: the order's limits where set, else the config's
+  defaults; temperature, `max_tokens` (= `max_output_tokens`) and `context_tokens` from the role.
 - **`GruntLoop::new(model: &ModelClient, tools: ToolRegistry, events: &dyn EventSink, transcript: Transcript, settings: LoopSettings)`**,
   with `run(&mut self, order: &Order, ctx: &ToolContext, on_finish: &mut impl FinishHandler) -> LoopOutcome`:
-  - `messages = [system, user(first message)]`.
+  - `messages = [system, user(first message)]` (transcript turn 0).
   - **Per turn, up to `max_turns`, before a deadline of `max_minutes`** (a `tokio::time::Instant`;
-    each model call and tool run sits in a `tokio::select!` with `sleep_until(deadline)` and
-    `cancel.cancelled()`):
+    each model call and tool run sits in a `tokio::select! { biased; … }` with
+    `cancel.cancelled()` first, then `sleep_until(deadline)`, then the work):
     1. `chat`.
     2. Emit `call`.
     3. Write the reply's `meta` and `raw_json` to the transcript.
     4. Append the assistant message: stripped content plus `tool_calls` exactly as received
        (fallback calls get their generated ids).
+  - A reply with no tool calls gets the user message `Use a tool to make progress, or call
+    finish.` (T11 counts these and gives up after 3).
   - **For each tool call:**
-    - `finish` → `on_finish`.
+    - `finish` → validate its arguments (bad ones → the error is its result, go on), emit
+      `finish`, then `on_finish`.
       - `Accept` → append the tool result `accepted` and return `Finished`.
       - `Reject(feedback)` → append the feedback as the finish call's tool result and go on.
-    - Otherwise: validate the arguments, then run or produce the error, then append
-      `tool(call.id, head_tail(output))`, then emit `tool`.
+    - Otherwise: `ToolRegistry::call` (lookup, validate, run), then append
+      `tool(call.id, head_tail(output))`, then emit `tool` (args shortened: strings over 200
+      chars → `"<N chars>"`; `error` = the first line of a failed result).
   - Every tool call in a reply must get its tool message before the next request.
   - Turns run out → `GaveUp("max_turns")`. The deadline passes → `GaveUp("max_minutes")`. A model
     error after retries → `Error`. Cancelled → `Error("cancelled")`.
