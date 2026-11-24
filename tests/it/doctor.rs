@@ -102,12 +102,7 @@ async fn a_missing_command_fails_its_check() {
 #[tokio::test]
 async fn no_config_at_all_says_run_init() {
     let ws = Workspace::new("http://unused/v1", &[]);
-    let empty = ws
-        .dir
-        .path()
-        .join("empty-config-home")
-        .display()
-        .to_string();
+    let empty = ws.dir().join("empty-config-home").display().to_string();
     // the real environment, minus any ORK_CONFIG, with the user file in an empty directory
     let process = Env::from_process();
     let env = Env::from_pairs(process.iter().filter(|(name, _)| *name != "ORK_CONFIG"))

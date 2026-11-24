@@ -31,7 +31,7 @@ task at a time and finish it without asking.
 - [x] T05 `ork doctor` and `ork models`
 - [x] T06 `ork ask`
 - [x] T07 Processes and the command policy
-- [ ] T08 Git, worktrees and the job store
+- [x] T08 Git, worktrees and the job store
 - [ ] T09 The grunt's tools
 - [ ] T10 The grunt loop
 - [ ] T11 Loop guards and context
@@ -750,32 +750,40 @@ finishes M0, without MCP (moved to v0.2).
 **Files:** `src/git.rs`, `src/jobs.rs`, `tests/it/support/temp_repo.rs`.
 
 **Details**
-- **`Git::new(runner: ProcessRunner)`**: every call runs `git -c user.name=orkestr8r -c user.email=orkestr8r@localhost …`
-  and returns an error with the output on a non-zero exit. Methods:
+- **`Git::new(runner: ProcessRunner)`**: every call runs `git -c user.name=orkestr8r -c user.email=orkestr8r@localhost -c core.quotepath=false …`
+  and returns an error with the output on a non-zero exit.
+  - It spawns git itself, with the runner's scrubbed environment (`child_env()`) but stdout and
+    stderr apart: `ProcessRunner::run` merges them, and git's warnings on stderr must not end up
+    in what we parse.
+  - `core.quotepath=false`: paths with non-ASCII characters come back as plain text.
+  - Methods:
   - `repo_root(cwd)` (`rev-parse --show-toplevel`), `head_sha(root)`, `current_branch(root)`.
   - `is_clean(root)`: `status --porcelain`, ignoring lines under `.ork/`.
   - `add_exclude(root, ".ork/")`: append to `$(git rev-parse --git-common-dir)/info/exclude` if
     missing (replaces T03's free function).
   - `worktree_add(root, path, branch, base_sha)`: `worktree add -b <branch> <path> <sha>`.
-  - `commit_all(dir, message)`: `add -A`, then `commit -m`; returns the sha, or `None` when nothing
-    changed.
-  - `num_stat(root, base_sha, branch)`: `diff --numstat base..branch` → `FileChange` (binary `-` →
-    0/0).
+  - `commit_all(dir, message)`: `add -A`, then `commit --no-verify -m` (ork's own commit on a job
+    branch: the repo's hooks don't run); returns the sha, or `None` when nothing changed.
+  - `num_stat(root, base_sha, branch)`: `diff --numstat --no-renames base..branch` → `FileChange`
+    (binary `-` → 0/0).
   - `diff(root, base_sha, branch, stat)`.
   - `merge(root, branch, squash, message)`: `--no-ff --no-edit -m`, or `--squash` followed by
-    `commit -m`; on a conflict, `merge --abort` and return an error.
+    `commit -m` (with the user's hooks: this lands on their branch). On a conflict, undo it and
+    return an error: `merge --abort`, or `reset --merge` after a squash (which leaves no
+    `MERGE_HEAD` to abort).
   - `worktree_remove(root, path)`: `worktree remove --force`.
   - `branch_delete(root, branch, force)`.
   - `ls_files(dir)`: `ls-files --cached --others --exclude-standard`.
-- **`JobId::new(existing)`:** 4 characters from `abcdefghjkmnpqrstuvwxyz23456789`, regenerated on a
-  collision.
+- **`jobs::new_job_id(taken)`:** 4 characters from `abcdefghjkmnpqrstuvwxyz23456789`, drawn again
+  while `taken(id)` says it's in use.
 - **`JobStore::new(root)`:**
   - `create(order, base_sha)` → writes `order.json` and `state.json` (status `running`) and returns
-    the paths.
-  - `load(id)`, `list()` (newest first), `set_status(id, status, reason)`, `write_report`.
-  - `events_path`, `transcript_path`.
+    the `JobState` (`branch` = `ork/<id>`, `worktree` = `.ork/worktrees/<id>`, relative, with `/`).
+  - `load(id)`, `load_order(id)`, `list()` (newest first), `set_status(id, status, reason)`,
+    `write_report`, `load_report`.
+  - `paths(id)` → the job's files (`events`, `transcript`, …); `worktree_path(id)` → the full path.
 - **`TempRepo`** (tests): a temp dir with `git init`, `core.autocrlf false`, an identity, and helpers
-  to write files and commit.
+  to write files and commit. The end-to-end `Workspace` is a `TempRepo` plus a config.
 
 **Tests** (`tests/it/git.rs`, temp repos)
 - A worktree is created from HEAD on `ork/<id>`.
