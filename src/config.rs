@@ -84,6 +84,9 @@ impl Default for DefaultsConfig {
 pub struct LoadedConfig {
     pub config: OrkConfig,
     pub sources: Vec<PathBuf>,
+    /// Things people should know (commands emit them as `warning` events), e.g. an API key
+    /// ignored because the repo's file changed its server.
+    pub warnings: Vec<String>,
 }
 
 /// Loads the config for a command run in `cwd`.
@@ -91,7 +94,9 @@ pub struct LoadedConfig {
 /// Files that don't exist are skipped. `ORK_CONFIG`, when set, replaces the user and repo files
 /// (and must exist). Bad JSON is an error; bad values are not (see [`OrkConfig::validate`]).
 pub fn load(cwd: &Path, env: &Env) -> anyhow::Result<LoadedConfig> {
-    let files = match env.get("ORK_CONFIG") {
+    // (file, trusted). The user file and ORK_CONFIG are the user's own choice; the repo's file
+    // comes with whatever was cloned.
+    let files: Vec<(PathBuf, bool)> = match env.get("ORK_CONFIG") {
         Some(path) => {
             let path = cwd.join(path);
             if !path.is_file() {
@@ -100,34 +105,69 @@ pub fn load(cwd: &Path, env: &Env) -> anyhow::Result<LoadedConfig> {
                     path.display()
                 );
             }
-            vec![path]
+            vec![(path, true)]
         }
-        None => [
-            user_path(env),
-            repo_root(cwd).map(|root| root.join("ork.json")),
-        ]
-        .into_iter()
-        .flatten()
-        .filter(|path| path.is_file())
-        .collect(),
+        None => {
+            let user = user_path(env).filter(|path| path.is_file());
+            let repo = repo_root(cwd)
+                .map(|root| root.join("ork.json"))
+                .filter(|path| path.is_file());
+            let user = user.map(|path| (path, true));
+            user.into_iter()
+                .chain(repo.map(|path| (path, false)))
+                .collect()
+        }
     };
 
     // Merge as JSON first, deserialize once: a key the user file sets survives a repo file that
     // doesn't mention it, and the defaults fill whatever nobody set.
     let mut merged = Value::Object(Default::default());
-    for file in &files {
+    let mut trusted = Value::Object(Default::default());
+    for (file, is_trusted) in &files {
         let text =
             std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
         let value: Value = serde_json::from_str(&text)
             .with_context(|| format!("{} is not valid JSON", file.display()))?;
+        if *is_trusted {
+            merge(&mut trusted, value.clone());
+        }
         merge(&mut merged, value);
     }
-    let config =
+    let mut config: OrkConfig =
         serde_json::from_value(merged).context("the config has a value of the wrong type")?;
+    let trusted: OrkConfig = serde_json::from_value(trusted).unwrap_or_default();
+    let warnings = drop_untrusted_keys(&mut config, &trusted);
+
     Ok(LoadedConfig {
         config,
-        sources: files,
+        sources: files.into_iter().map(|(path, _)| path).collect(),
+        warnings,
     })
+}
+
+/// An API key is only sent to a server whose `url` and `key_env` the user's own file (or
+/// `ORK_CONFIG`) sets exactly. Otherwise a cloned repo's `ork.json` could point a server at its
+/// own host, or name another variable (`AWS_SECRET_ACCESS_KEY`) as the key, and `ork` would send
+/// it as a Bearer token. Returns a warning per key dropped.
+fn drop_untrusted_keys(config: &mut OrkConfig, trusted: &OrkConfig) -> Vec<String> {
+    let mut warnings = Vec::new();
+    for (name, server) in &mut config.servers {
+        if server.key_env.is_none() {
+            continue;
+        }
+        let as_trusted = trusted
+            .servers
+            .get(name)
+            .is_some_and(|own| own.url == server.url && own.key_env == server.key_env);
+        if !as_trusted {
+            server.key_env = None;
+            warnings.push(format!(
+                "servers.{name}.key_env: ignored, because the repo's ork.json changes this server; \
+                 API keys are only sent to servers your user file defines (ork init --user)"
+            ));
+        }
+    }
+    warnings
 }
 
 /// Deep-merges `overlay` into `base`: objects merge key by key, anything else (arrays included)

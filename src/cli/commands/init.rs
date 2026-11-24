@@ -20,7 +20,8 @@ pub struct InitArgs {
     /// The grunt's model, as the server names it
     #[arg(long)]
     pub model: String,
-    /// The environment variable that holds the API key (the key itself never goes in the file)
+    /// The environment variable that holds the API key (the key itself never goes in the file).
+    /// Needs --user.
     #[arg(long)]
     pub key_env: Option<String>,
     /// The model's context window, in tokens
@@ -35,6 +36,12 @@ pub struct InitArgs {
 }
 
 pub async fn run(ctx: &CliContext, args: InitArgs) -> anyhow::Result<CommandResult> {
+    if args.key_env.is_some() && !args.user {
+        bail!(
+            "--key-env needs --user: API keys are only sent to servers your user file defines, \
+             so a repo's ork.json can't send your key elsewhere"
+        );
+    }
     let root = config::repo_root(&ctx.cwd);
     let path = if args.user {
         config::user_path(&ctx.env)

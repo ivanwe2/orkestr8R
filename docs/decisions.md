@@ -26,6 +26,14 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
     `cargo install` never installs it;
   - `process-wrap` kills whole process trees (process group on Unix, Job Object on Windows);
   - CI runs on pull requests and on pushes to `main`.
+- **A repo's `ork.json` can't direct API keys.** A key is only sent to a server whose `url` and
+  `key_env` the user's own file (or `ORK_CONFIG`) sets exactly; otherwise it's dropped with a
+  warning. A cloned repo could otherwise point a server at its own host, or name any variable
+  (`AWS_SECRET_ACCESS_KEY`) as the key, and receive it as a Bearer token. So `ork init --key-env`
+  needs `--user`.
+  - The repo file may still set `allow_commands`: running a repo's checks (`cargo test`, build
+    scripts) already runs that repo's code, so an allow-list from it adds no new power. Use
+    orkestr8R on repos whose tests you'd run yourself.
 - **Process environment:** the allow-list no longer passes every `NUGET_*` variable (they can carry
   tokens, e.g. `NUGET_AUTH_TOKEN`); it passes named toolchain variables instead (`CARGO_HOME`,
   `RUSTUP_HOME`, `GOPATH`, `NUGET_PACKAGES`, …) plus `DOTNET_*`.

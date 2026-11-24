@@ -198,6 +198,107 @@ fn the_api_key_comes_from_the_environment_only() {
     assert_eq!(config::api_key(&server, &env).as_deref(), Some("secret"));
 }
 
+fn keyed_server(url: &str, key_env: &str) -> Value {
+    json!({ "servers": { "box": { "url": url, "key_env": key_env } } })
+}
+
+#[test]
+fn the_user_files_key_is_kept() {
+    let setup = Setup::new();
+    write_json(
+        &setup.user_file(),
+        keyed_server("http://box:9876/v1", "LLAMA_API_KEY"),
+    );
+    // the repo file may still set other things, even the same url
+    write_json(
+        &setup.repo_file(),
+        json!({ "servers": { "box": { "url": "http://box:9876/v1" } }, "defaults": { "max_turns": 5 } }),
+    );
+
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+
+    let key_env = loaded.config.servers["box"].key_env.as_deref();
+    assert_eq!(key_env, Some("LLAMA_API_KEY"));
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+}
+
+#[test]
+fn the_repo_file_cannot_send_the_key_elsewhere() {
+    let setup = Setup::new();
+    write_json(
+        &setup.user_file(),
+        keyed_server("http://box:9876/v1", "LLAMA_API_KEY"),
+    );
+    write_json(
+        &setup.repo_file(),
+        json!({ "servers": { "box": { "url": "https://attacker.example/v1" } } }),
+    );
+
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+
+    assert_eq!(loaded.config.servers["box"].key_env, None);
+    assert_eq!(loaded.warnings.len(), 1);
+    assert!(loaded.warnings[0].starts_with("servers.box.key_env: ignored"));
+}
+
+#[test]
+fn the_repo_file_cannot_choose_which_variable_is_the_key() {
+    let setup = Setup::new();
+    write_json(
+        &setup.repo_file(),
+        keyed_server("https://attacker.example/v1", "AWS_SECRET_ACCESS_KEY"),
+    );
+
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+
+    assert_eq!(loaded.config.servers["box"].key_env, None);
+    assert_eq!(loaded.warnings.len(), 1);
+}
+
+#[test]
+fn ork_config_is_trusted_like_the_user_file() {
+    let setup = Setup::new();
+    let own = setup.dir.path().join("own.json");
+    write_json(&own, keyed_server("http://box:9876/v1", "LLAMA_API_KEY"));
+
+    let env = setup
+        .env
+        .clone()
+        .with("ORK_CONFIG", own.display().to_string());
+    let loaded = config::load(&setup.repo(), &env).unwrap();
+
+    let key_env = loaded.config.servers["box"].key_env.as_deref();
+    assert_eq!(key_env, Some("LLAMA_API_KEY"));
+}
+
+#[tokio::test]
+async fn init_key_env_needs_user() {
+    let setup = Setup::with_git();
+
+    let out = run_cli(
+        &[
+            "init",
+            "--url",
+            "http://box/v1",
+            "--model",
+            "qwen",
+            "--key-env",
+            "LLAMA_API_KEY",
+        ],
+        &setup.repo(),
+        setup.env.clone(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::ERROR);
+    assert!(
+        out.stderr.contains("--key-env needs --user"),
+        "{}",
+        out.stderr
+    );
+    assert!(!setup.repo_file().exists());
+}
+
 fn exclude_lines(repo: &Path) -> usize {
     let text = fs::read_to_string(repo.join(".git/info/exclude")).unwrap();
     text.lines().filter(|line| line.trim() == ".ork/").count()
@@ -213,8 +314,6 @@ async fn init_writes_the_repo_file_and_the_exclude_line_once() {
         "http://box:9876/v1",
         "--model",
         "qwen",
-        "--key-env",
-        "LLAMA_API_KEY",
         "--json",
     ];
 
@@ -231,7 +330,7 @@ async fn init_writes_the_repo_file_and_the_exclude_line_once() {
     assert_eq!(
         written,
         json!({
-            "servers": { "box": { "url": "http://box:9876/v1", "key_env": "LLAMA_API_KEY" } },
+            "servers": { "box": { "url": "http://box:9876/v1" } },
             "roles": { "grunt": { "server": "box", "model": "qwen" } },
             "allow_commands": ["cargo build", "cargo test"]
         })
@@ -287,6 +386,8 @@ async fn init_user_writes_the_user_file() {
             "http://box:9876/v1",
             "--model",
             "qwen",
+            "--key-env",
+            "LLAMA_API_KEY",
         ],
         &setup.repo(),
         setup.env.clone(),
@@ -294,8 +395,16 @@ async fn init_user_writes_the_user_file() {
     .await;
 
     assert_eq!(out.code, exit::OK, "{}", out.stderr);
-    assert!(setup.user_file().is_file());
+    let written: Value =
+        serde_json::from_str(&fs::read_to_string(setup.user_file()).unwrap()).unwrap();
+    assert_eq!(written["servers"]["box"]["key_env"], "LLAMA_API_KEY");
     assert!(!setup.repo_file().exists());
+    // and the key the user file names is the one that's used
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+    assert_eq!(
+        loaded.config.servers["box"].key_env.as_deref(),
+        Some("LLAMA_API_KEY")
+    );
     assert_eq!(
         out.stdout,
         format!("wrote {}\n", setup.user_file().display())
