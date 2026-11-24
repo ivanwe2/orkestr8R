@@ -29,7 +29,7 @@ task at a time and finish it without asking.
 - [x] T03 Config and `ork init`
 - [x] T04 Model client and fake model server
 - [x] T05 `ork doctor` and `ork models`
-- [ ] T06 `ork ask`
+- [x] T06 `ork ask`
 - [ ] T07 Processes and the command policy
 - [ ] T08 Git, worktrees and the job store
 - [ ] T09 The grunt's tools
@@ -188,6 +188,7 @@ src/
   orders.rs                Order, OrderMode, validate, Report and its parts, JobStatus
   model/      mod.rs (ModelClient), wire.rs, think.rs, fallback.rs
   process/    mod.rs, split.rs, policy.rs, runner.rs, find.rs, truncate.rs
+  text.rs                  numbered lines (`{n:>5} │ line`) and char-safe cuts, shared by ask, tools and the first message
   git.rs
   jobs.rs                  job ids, JobState, JobStore
   tools/      mod.rs (Tool, ToolRegistry, ToolContext, ToolResult), args.rs, guard.rs,
@@ -671,6 +672,7 @@ finishes M0, without MCP (moved to v0.2).
   - user: the question, then each file in a fenced block with numbered lines.
   - Each file is capped at 400 lines and the total at 48,000 characters; add a `truncated` warning
     when anything is cut.
+- Emit a `call` event for the request (every model request is one).
 - The answer (think blocks stripped) goes to stdout. With `--json`, `result.data` =
   `{ answer, model, tokens_in, tokens_out, seconds }`.
 

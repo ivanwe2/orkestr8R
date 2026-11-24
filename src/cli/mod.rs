@@ -45,6 +45,8 @@ pub enum Commands {
     Doctor,
     /// Which model does each role, on which server; --test sends a tiny request
     Models(commands::models::ModelsArgs),
+    /// A one-shot, read-only answer about files from the local model
+    Ask(commands::ask::AskArgs),
 }
 
 /// The clap command tree (T15's sync test enumerates its subcommands).
@@ -93,6 +95,7 @@ pub async fn run(
         Commands::Init(args) => complete(&ctx, commands::init::run(&ctx, args)).await,
         Commands::Doctor => complete(&ctx, commands::doctor::run(&ctx)).await,
         Commands::Models(args) => complete(&ctx, commands::models::run(&ctx, args)).await,
+        Commands::Ask(args) => complete(&ctx, commands::ask::run(&ctx, args)).await,
     }
 }
 
