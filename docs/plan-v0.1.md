@@ -30,7 +30,7 @@ task at a time and finish it without asking.
 - [x] T04 Model client and fake model server
 - [x] T05 `ork doctor` and `ork models`
 - [x] T06 `ork ask`
-- [ ] T07 Processes and the command policy
+- [x] T07 Processes and the command policy
 - [ ] T08 Git, worktrees and the job store
 - [ ] T09 The grunt's tools
 - [ ] T10 The grunt loop
@@ -693,11 +693,13 @@ finishes M0, without MCP (moved to v0.2).
 **Details**
 - **`split(&str) -> anyhow::Result<Vec<String>>`** → argv.
   - Whitespace separates arguments.
-  - `"…"` and `'…'` group; `\"` is allowed inside double quotes.
+  - `"…"` and `'…'` group, and may touch other text (`--name="a b"`); `\"` is a literal `"` inside
+    double quotes, and every other backslash is kept as is (Windows paths).
   - An unclosed quote is an error.
 - **`CommandPolicy::new(allow: Vec<String>)`, `check(&self, cmd: &str) -> Result<Vec<String>, String>`**
   → the argv, or the reason it's refused.
-  - Refuse any of the characters ``; & | < > $ ` `` or a newline.
+  - Refuse any of the characters ``; & | < > $ ` ``, a newline or a carriage return.
+  - An empty allow-list refuses everything, saying `allow_commands` is empty.
   - Allowed when argv starts with every token of some allow entry, token by token: `cargo test`
     allows `cargo test --test it`, not `cargo run`.
 - **`ProcessRunner::new(env: Env)`, `run(&self, spec: ProcessSpec, cancel: &CancellationToken)
@@ -705,7 +707,10 @@ finishes M0, without MCP (moved to v0.2).
   `ProcessSpec { argv: Vec<String>, cwd: PathBuf, timeout: Duration }`:
   - The program is `process::find(argv[0])`; the rest are arguments; stdin is null.
   - Spawn through `process-wrap` (tokio): a new process group on Unix, a Job Object on Windows, so a
-    timeout or a cancel kills the whole tree, not just the direct child.
+    timeout or a cancel kills the whole tree, not just the direct child. Plus `KillOnDrop`: when the
+    loop drops a running `run` future (its deadline or Ctrl+C won a `select!`), the tree dies too.
+  - After a kill, wait at most 5 s for the pipes to close (a straggler that escaped the tree must
+    not hang `ork`).
   - Capture stdout and stderr into one buffer, in arrival order (read both pipes concurrently and
     append to one shared buffer). Keep at most 1 MB: the first and last 512 KB. Decode as lossy
     UTF-8.
@@ -721,13 +726,15 @@ finishes M0, without MCP (moved to v0.2).
       or `CARGO_*`: those can carry tokens, e.g. `NUGET_AUTH_TOKEN`, `CARGO_REGISTRY_TOKEN`.)
     - Then set `CI=true`, `NO_COLOR=1`, `TERM=dumb`, `CARGO_TERM_COLOR=never`,
       `DOTNET_CLI_TELEMETRY_OPTOUT=1`, `DOTNET_NOLOGO=1`.
-- **`truncate::head_tail(s: &str, max: usize)`** (`max` = 4,000 by default) → the first 2,000
+- **`truncate::head_tail(s: &str, max: usize)`** (`HEAD_TAIL_MAX` = 4,000, since Rust has no default
+  arguments) → the first 2,000
   characters + `\n…[N chars cut]…\n` + the last 2,000. Counted in chars, cut on char boundaries.
 
 **Tests** (`tests/it/processes.rs`)
 - Split cases: quotes, the escape, an unclosed quote.
 - Policy cases: allowed, prefix mismatch, each metacharacter.
-- The runner with `ork-testtool` (`env!("CARGO_BIN_EXE_ork-testtool")`):
+- The runner with `ork-testtool` (`env!("CARGO_BIN_EXE_ork-testtool")`; the module is
+  `#[cfg(feature = "testtool")]`, so plain `cargo test` still compiles):
   - `exit 3` → 3;
   - `print 5` → five lines;
   - `sleep 30` with a 1 s timeout → `timed_out`, killed;

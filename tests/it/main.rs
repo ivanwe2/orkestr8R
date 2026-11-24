@@ -7,5 +7,8 @@ mod config;
 mod doctor;
 mod model;
 mod output;
+// runs ork-testtool, which is only built with --features testtool
+#[cfg(feature = "testtool")]
+mod processes;
 mod scaffold;
 mod support;
