@@ -32,7 +32,7 @@ task at a time and finish it without asking.
 - [x] T06 `ork ask`
 - [x] T07 Processes and the command policy
 - [x] T08 Git, worktrees and the job store
-- [ ] T09 The grunt's tools
+- [x] T09 The grunt's tools
 - [ ] T10 The grunt loop
 - [ ] T11 Loop guards and context
 - [ ] T12 Checks, repair turns and the report
@@ -809,19 +809,28 @@ registry; any for the individual tools
 - **`args::validate(args_json: &str, schema: &Value) -> Result<Value, String>`.**
   - It supports the subset we use: `type: object`, `properties`, `required`, and the types `string`,
     `integer`, `boolean`, and `array` of strings.
-  - The error says what was wrong and shows the expected schema, because the model reads it.
+  - The error says what was wrong and shows the expected schema (one line, without the
+    descriptions), because the model reads it.
+  - Lenient where the meaning is plain, because local models do these often: an empty string is
+    `{}`; an integer or boolean sent as a string (`"10"`, `"true"`) is converted; unknown keys are
+    ignored.
 - **`PathGuard::new(root, write_scope)`:**
   - **`resolve(&self, rel: &str, write: bool) -> Result<PathBuf, String>`:**
     - Join with the root and normalize lexically (`.` and `..` resolved without touching the disk).
       The result must be the root or under it, compared component by component
       (case-insensitively on Windows). An absolute `rel` that lands outside fails the same check.
     - No path segment may be `.git`.
-    - The deepest part of the path that exists is canonicalized (`dunce::canonicalize`) and must
-      also be under the canonical root, so a symlink anywhere on the path can't lead out.
+    - The deepest part of the path that exists (by `symlink_metadata`, so a dangling link counts)
+      is canonicalized (`dunce::canonicalize`) and must also be under the canonical root, so a
+      symlink anywhere on the path can't lead out. A link that leads nowhere is refused: writing
+      through it would create its target, wherever that is.
   - **For writes, the path must also match `write_scope`:**
     - a `globset::GlobSet` built with `GlobBuilder::new(p).literal_separator(true)` (so `*` doesn't
       cross `/`), case-insensitive on Windows;
-    - test the path relative to the root, with forward slashes.
+    - test the path relative to the root, with forward slashes;
+    - an empty scope refuses every write.
+- **`ToolContext::new(root, order, config, env, cancel)`** builds the guard, the policy and the
+  runner; `ctx.git()` gives a `Git` on the same runner.
 - **Tools.** Each has a JSON Schema and returns `ToolResult`. Errors are results the model can
   read, never Rust errors or panics.
 
@@ -835,10 +844,22 @@ registry; any for the individual tools
   | `run` | `cmd` | `CommandPolicy` must allow it (refused → error with the reason and the allow-list). Runs in the root with `tool_timeout_seconds`. Result: `exit {code} in {s}s` + `head_tail(output)`. Ok even when exit ≠ 0 (the model reads the code); a timeout → not ok |
   | `finish` | `summary`, `open_questions?` | Schema only; the loop handles it |
 
+  Details as built:
+  - `list_dir`: directories at the last level show a count, `tools/  (12 files)`.
+  - `grep`: `rg` prints `./path` for `.`, so a leading `./` (or `.\`) is stripped. For `git grep`,
+    a glob without `/` gets `**/` in front so it matches at any depth, as `rg -g` does; with a path
+    it's `:(glob)PATH/**/GLOB`.
+  - `read_file`: a `start` past the end is an error.
+  - `edit_file`: an empty `old`, or a file that isn't UTF-8, is an error; the lines shown are the
+    new text plus 3 lines on each side.
+
 - **`ToolRegistry::for_mode(OrderMode)`:**
   - `write` → all tools;
-  - `readonly` → `read_file`, `list_dir`, `grep`, `finish`.
+  - `readonly` → `read_file`, `list_dir`, `grep`, `finish` (every tool with `writes()` false;
+    `run` counts as writing, since commands can change files).
   - `schemas()` gives the list sent to the model; `get(name)` → `Option<Tool>`.
+  - `call(name, args_json, ctx)`: looks the tool up (unknown → an error listing the tools),
+    validates, runs. The loop uses this.
 
 **Tests** (`tests/it/tools.rs`): for every tool, the happy path and each error, plus:
 - path escapes: `../x`, an absolute path outside, `.git/config`, a symlink out (skipped when the
