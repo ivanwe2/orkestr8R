@@ -13,7 +13,9 @@
 //! Everything slow (a model call, a tool) is raced against Ctrl+C and the minute deadline in a
 //! `tokio::select!`; the loser is dropped, which cancels it (and kills a running command's tree).
 
+pub mod context;
 pub mod first_message;
+pub mod guards;
 pub mod prompts;
 pub mod transcript;
 
@@ -23,6 +25,8 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use tokio::time::Instant;
 
+pub use context::ContextKeeper;
+pub use guards::{LoopGuards, REPEAT_NOTE, Repeat};
 pub use transcript::Transcript;
 
 use crate::config::{OrkConfig, RoleConfig};
@@ -32,8 +36,11 @@ use crate::orders::Order;
 use crate::process::{HEAD_TAIL_MAX, head_tail};
 use crate::tools::{Tool, ToolContext, ToolRegistry, args};
 
-/// What the model sends back when a reply has no tool call.
+/// The user message after a reply with no tool call.
 pub const NUDGE_NO_TOOLS: &str = "Use a tool to make progress, or call finish.";
+/// The user message after a reply that hit `max_tokens`.
+pub const NUDGE_CUT_OFF: &str =
+    "Your reply was cut off. Keep messages short; one tool call at a time.";
 
 /// The grunt called `finish`.
 #[derive(Debug, Clone, PartialEq)]
@@ -157,9 +164,20 @@ impl<'a> GruntLoop<'a> {
             WireMessage::user(first_message::render(order, &seed)),
         );
         let mut tally = Tally::default();
+        let mut guards = LoopGuards::default();
+        let keeper = ContextKeeper::new(self.settings.context_tokens);
+        let mut last_prompt_tokens = 0;
 
         for turn in 1..=self.settings.max_turns {
             tally.turns = turn;
+            // The last reply said how big the prompt was; make room before sending more.
+            let stubbed = keeper.shrink(&mut messages, last_prompt_tokens);
+            if stubbed > 0 {
+                self.events.emit(&OrkEvent::Warning {
+                    code: "context_stubbed".into(),
+                    message: format!("replaced {stubbed} old tool outputs with stubs to stay in the context window"),
+                });
+            }
             let request = ChatRequest {
                 messages: messages.clone(),
                 tools: self.tools.schemas(),
@@ -178,14 +196,31 @@ impl<'a> GruntLoop<'a> {
                 Err(err) => return tally.end(LoopEnd::Error, format!("{err:#}")),
             };
             self.record_reply(turn, &reply, &mut tally);
+            last_prompt_tokens = reply.tokens_in;
+            let cut_off = reply.finish_reason.as_deref() == Some("length");
+            if cut_off {
+                self.events.emit(&OrkEvent::Warning {
+                    code: "reply_cut".into(),
+                    message: format!("the reply hit max_tokens ({})", self.settings.max_tokens),
+                });
+            }
 
             // The assistant message goes in before the results: each result answers a call in it.
             self.push(&mut messages, turn, reply.to_message());
 
             if reply.tool_calls.is_empty() {
+                if cut_off {
+                    // Not the model's fault in the same way: tell it why, don't count it.
+                    self.push(&mut messages, turn, WireMessage::user(NUDGE_CUT_OFF));
+                    continue;
+                }
+                if let Some(reason) = guards.text_reply() {
+                    return tally.end(LoopEnd::GaveUp, reason);
+                }
                 self.push(&mut messages, turn, WireMessage::user(NUDGE_NO_TOOLS));
                 continue;
             }
+            guards.tool_reply();
 
             // Every call gets its own tool message, tied by id, before the next request.
             for call in &reply.tool_calls {
@@ -207,6 +242,9 @@ impl<'a> GruntLoop<'a> {
                                     turn,
                                     WireMessage::tool(&call.id, problem),
                                 );
+                                if let Some(reason) = guards.malformed_call() {
+                                    return tally.end(LoopEnd::GaveUp, reason);
+                                }
                                 continue;
                             }
                         };
@@ -231,12 +269,27 @@ impl<'a> GruntLoop<'a> {
                     continue;
                 }
 
+                // Malformed (unknown tool, arguments that don't fit): the error, with the schema,
+                // is the result. A streak of them ends the run.
+                let (tool, args) = match self.tools.prepare(&call.name, &call.arguments) {
+                    Ok(prepared) => prepared,
+                    Err(problem) => {
+                        self.emit_tool(turn, &call.name, &call.arguments, false, 0, &problem);
+                        self.push(&mut messages, turn, WireMessage::tool(&call.id, problem));
+                        if let Some(reason) = guards.malformed_call() {
+                            return tally.end(LoopEnd::GaveUp, reason);
+                        }
+                        continue;
+                    }
+                };
+                let repeat = guards.good_call(&call.name, &args);
+
                 let started = std::time::Instant::now();
                 let result = tokio::select! {
                     biased;
                     _ = ctx.cancel.cancelled() => return tally.end(LoopEnd::Error, "cancelled"),
                     _ = tokio::time::sleep_until(deadline) => return tally.end(LoopEnd::GaveUp, "max_minutes"),
-                    result = self.tools.call(&call.name, &call.arguments, ctx) => result,
+                    result = tool.run(&args, ctx) => result,
                 };
                 let ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
                 self.emit_tool(
@@ -248,11 +301,17 @@ impl<'a> GruntLoop<'a> {
                     &result.output,
                 );
                 // Long outputs (a test run) would flood the context: keep the head and the tail.
-                self.push(
-                    &mut messages,
-                    turn,
-                    WireMessage::tool(&call.id, head_tail(&result.output, HEAD_TAIL_MAX)),
-                );
+                let mut content = head_tail(&result.output, HEAD_TAIL_MAX);
+                if repeat != Repeat::New {
+                    content = format!("{REPEAT_NOTE}\n{content}");
+                }
+                self.push(&mut messages, turn, WireMessage::tool(&call.id, content));
+                if repeat == Repeat::GiveUp {
+                    return tally.end(LoopEnd::GaveUp, "repeating");
+                }
+            }
+            if cut_off {
+                self.push(&mut messages, turn, WireMessage::user(NUDGE_CUT_OFF));
             }
         }
         tally.end(LoopEnd::GaveUp, "max_turns")
