@@ -28,7 +28,7 @@ task at a time and finish it without asking.
 - [x] T02 JSON, events and CLI output
 - [x] T03 Config and `ork init`
 - [x] T04 Model client and fake model server
-- [ ] T05 `ork doctor` and `ork models`
+- [x] T05 `ork doctor` and `ork models`
 - [ ] T06 `ork ask`
 - [ ] T07 Processes and the command policy
 - [ ] T08 Git, worktrees and the job store
@@ -637,12 +637,18 @@ server that every later test uses.
      On failure the hint is: "the model replied with text instead of a tool call; for llama-server,
      check the chat template / --jinja, or try another model".
   5. `commands`: the executable of every `allow_commands` entry is found on PATH.
-  - Exit 0 if all pass, else 1. `result.data` = the list.
+  - Exit 0 if all pass, else 1 (`error` = "N of 5 checks failed"). `result.data` =
+    `{ "checks": [...] }`.
+  - Doctor's model requests are not retried: a down server should show at once, not after the
+    backoff.
+  - The client comes from `ModelClient::for_role(config, "grunt", env)` (also used by `ask` and
+    `run`): the role's server, model, key and the config's request timeout.
 - **`process::find(name, env, cwd)`:** `which::which_in` over the `PATH` from `env` (PATHEXT on
   Windows is handled by `which`).
 - **`ork models [--test] [--json]`:**
   - Lists each role → server, url, model, whether the key is set.
-  - `--test` sends `Reply with OK.` per role and reports seconds, tokens and tokens per second.
+  - `--test` sends `Reply with OK.` per role (no retries) and reports seconds, tokens and tokens
+    per second. `result.data` = `{ "roles": [{ role, server, url, model, key_set, test? }] }`.
 
 **Tests** (`tests/it/doctor.rs`), with the fake server:
 - all pass;
