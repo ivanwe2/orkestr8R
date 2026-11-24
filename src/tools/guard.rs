@@ -40,45 +40,58 @@ impl PathGuard {
         &self.root
     }
 
-    /// The full path for `rel`, or why it's refused (written for the model to read).
+    /// The real full path for `rel`, or why it's refused (written for the model to read).
     pub fn resolve(&self, rel: &str, write: bool) -> Result<PathBuf, String> {
         let shown = if rel.is_empty() { "." } else { rel };
 
         // 1. Lexically: `..` and `.` resolved without touching the disk. An absolute `rel` replaces
         //    the root in `join`, and then fails the same check.
         let path = normalize(&self.root.join(rel));
-        let Some(inside) = relative_to(&path, &self.root) else {
+        let Some(lexical) = relative_to(&path, &self.root) else {
             return Err(format!("refused: {shown} is outside the repository"));
         };
-        if inside
-            .components()
-            .any(|c| same(c.as_os_str().to_string_lossy().as_ref(), ".git"))
+        if cfg!(windows)
+            && lexical
+                .components()
+                .any(|c| is_windows_alias(&c.as_os_str().to_string_lossy()))
         {
+            return Err(format!(
+                "refused: {shown}: `:` and names ending in `.` or a space aren't allowed (on Windows \
+                 they name other files)"
+            ));
+        }
+        if has_git_segment(&lexical) {
             return Err(format!(
                 "refused: {shown} is inside .git, which is off limits"
             ));
         }
 
-        // 2. On disk: a symlink anywhere on the path could still lead out. Canonicalize the
-        //    deepest part that exists and check again.
+        // 2. On disk: a link anywhere on the path decides where it really leads. Canonicalize the
+        //    deepest part that exists (by symlink_metadata, so a dangling link counts as existing),
+        //    put the rest back on, and judge that real path: inside the root, not in .git, and (for
+        //    writes) in scope. `src/hooks -> ../.git/hooks` is refused here, though it looks fine.
         let mut existing = path.clone();
+        let mut rest = Vec::new();
         while std::fs::symlink_metadata(&existing).is_err() {
-            if !existing.pop() {
+            let Some(name) = existing.file_name() else {
                 break;
-            }
+            };
+            rest.push(name.to_owned());
+            existing.pop();
         }
-        match dunce::canonicalize(&existing) {
-            Ok(real) if relative_to(&real, &self.root).is_some() => {}
-            Ok(_) => {
-                return Err(format!(
-                    "refused: {shown} leads outside the repository through a link"
-                ));
-            }
-            Err(_) => {
-                return Err(format!(
-                    "refused: {shown} goes through a link that leads nowhere"
-                ));
-            }
+        let Ok(mut real) = dunce::canonicalize(&existing) else {
+            return Err(format!(
+                "refused: {shown} goes through a link that leads nowhere"
+            ));
+        };
+        real.extend(rest.iter().rev());
+        let Some(inside) = relative_to(&real, &self.root) else {
+            return Err(format!(
+                "refused: {shown} leads outside the repository through a link"
+            ));
+        };
+        if has_git_segment(&inside) {
+            return Err(format!("refused: {shown} leads into .git through a link"));
         }
 
         // 3. Writes must also be in scope.
@@ -96,7 +109,7 @@ impl PathGuard {
                 ));
             }
         }
-        Ok(path)
+        Ok(real)
     }
 
     /// `path` relative to the root, with `/` (for messages and globs).
@@ -105,6 +118,17 @@ impl PathGuard {
             .map(|rel| to_slash(&rel))
             .unwrap_or_else(|| path.display().to_string())
     }
+}
+
+fn has_git_segment(path: &Path) -> bool {
+    path.components()
+        .any(|c| same(&c.as_os_str().to_string_lossy(), ".git"))
+}
+
+/// A Windows name that points at another file: `a.txt:stream` (an alternate data stream), or a
+/// trailing `.` or space, which Windows drops (`.git.` is `.git`).
+fn is_windows_alias(part: &str) -> bool {
+    part.contains(':') || part.ends_with('.') || part.ends_with(' ')
 }
 
 /// `.` and `..` resolved without touching the disk.

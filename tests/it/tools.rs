@@ -602,3 +602,99 @@ fn argument_validation_cases() {
     );
     assert!(err(r#"{"path": "a", "all": "yes"}"#).contains("`all` must be true or false"));
 }
+
+/// A directory symlink, or false where that isn't allowed (Windows without the privilege).
+fn symlink_dir(target: &std::path::Path, link: &std::path::Path) -> bool {
+    #[cfg(unix)]
+    return std::os::unix::fs::symlink(target, link).is_ok();
+    #[cfg(windows)]
+    return std::os::windows::fs::symlink_dir(target, link).is_ok();
+}
+
+#[tokio::test]
+async fn a_link_into_dot_git_is_refused_though_it_looks_fine() {
+    let s = Setup::new(&[("src/lib.rs", "x\n")], &["src/**"]);
+    if !symlink_dir(
+        &s.repo.path.join(".git/hooks"),
+        &s.repo.path.join("src/hooks"),
+    ) {
+        eprintln!("skipped: can't create a symlink here");
+        return;
+    }
+
+    let write = s
+        .call(
+            "write_file",
+            json!({ "path": "src/hooks/pre-commit", "content": "#!/bin/sh\n" }),
+        )
+        .await;
+    assert_refused(&write, "leads into .git through a link");
+    assert!(!s.repo.path.join(".git/hooks/pre-commit").exists());
+    let read = s
+        .call(
+            "read_file",
+            json!({ "path": "src/hooks/pre-commit.sample" }),
+        )
+        .await;
+    assert_refused(&read, "leads into .git through a link");
+}
+
+#[tokio::test]
+async fn the_scope_is_judged_on_where_a_link_really_leads() {
+    let s = Setup::new(
+        &[("src/lib.rs", "x\n"), ("docs/readme.md", "y\n")],
+        &["docs/**"],
+    );
+    if !symlink_dir(&s.repo.path.join("src"), &s.repo.path.join("docs/code")) {
+        eprintln!("skipped: can't create a symlink here");
+        return;
+    }
+
+    // docs/code/new.rs looks in scope, but it's really src/new.rs
+    let write = s
+        .call(
+            "write_file",
+            json!({ "path": "docs/code/new.rs", "content": "x" }),
+        )
+        .await;
+    assert_refused(
+        &write,
+        "src/new.rs is outside the files you may change (docs/**)",
+    );
+    // reading through a link that stays inside is fine
+    assert!(
+        s.call("read_file", json!({ "path": "docs/code/lib.rs" }))
+            .await
+            .ok
+    );
+}
+
+#[tokio::test]
+async fn grep_globs_cannot_lead_outside() {
+    let s = Setup::new(&[("src/calc.rs", "sum\n")], &[]);
+
+    for glob in ["../*", ".git/**", "src/../../x", "/etc/*"] {
+        let result = s
+            .call("grep", json!({ "pattern": "sum", "glob": glob }))
+            .await;
+        assert_refused(&result, "no `..`, `.git` or absolute paths");
+    }
+    assert!(
+        s.call("grep", json!({ "pattern": "sum", "glob": "src/*.rs" }))
+            .await
+            .ok
+    );
+}
+
+#[cfg(windows)]
+#[tokio::test]
+async fn windows_names_that_alias_other_files_are_refused() {
+    let s = Setup::new(&[("a.txt", "a\n")], &["**"]);
+
+    for path in ["a.txt:hidden", r".git.\config", r"src. \x.rs"] {
+        let result = s
+            .call("write_file", json!({ "path": path, "content": "x" }))
+            .await;
+        assert!(!result.ok, "{path}: {}", result.output);
+    }
+}

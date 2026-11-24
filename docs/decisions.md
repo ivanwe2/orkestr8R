@@ -26,6 +26,14 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
     `cargo install` never installs it;
   - `process-wrap` kills whole process trees (process group on Unix, Job Object on Windows);
   - CI runs on pull requests and on pushes to `main`.
+- **The command allow-list is a guardrail, not a sandbox** (from a security review of T09). It
+  stops accidents (`git push`, `rm -rf`), not a hostile grunt: allowed commands have flags that
+  run other programs (`git grep -O<cmd>`, `cargo test --config build.rustc-wrapper=…`), and every
+  check runs code the grunt wrote. Deny-listing flags would be whack-a-mole. The real boundary is
+  OS isolation (bubblewrap, v0.3); until then: the worktree, the path guard, the scrubbed
+  environment, and not running orkestr8R on code you wouldn't run yourself.
+- **The path guard judges the real path.** The `.git` and scope checks run on the canonical path
+  (the existing part canonicalized, the rest put back on), so a link is judged by where it leads.
 - **A repo's `ork.json` can't direct API keys.** A key is only sent to a server whose `url` and
   `key_env` the user's own file (or `ORK_CONFIG`) sets exactly; otherwise it's dropped with a
   warning. A cloned repo could otherwise point a server at its own host, or name any variable

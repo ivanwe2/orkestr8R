@@ -30,6 +30,19 @@ pub async fn run(args: &Value, ctx: &ToolContext) -> ToolResult {
         Ok(path) => ctx.guard.display(&path),
         Err(refused) => return ToolResult::error(refused),
     };
+    // The glob only narrows the search; it must not lead it anywhere the path guard wouldn't
+    // (rg's -g overrides its ignore rules).
+    if let Some(glob) = glob
+        && (glob.starts_with(['/', '\\'])
+            || glob.contains(':')
+            || glob
+                .split(['/', '\\'])
+                .any(|part| part == ".." || part.eq_ignore_ascii_case(".git")))
+    {
+        return ToolResult::error(format!(
+            "refused: glob {glob}: no `..`, `.git` or absolute paths; use path to choose where to search"
+        ));
+    }
 
     let argv = if find("rg", ctx.runner.env(), &ctx.root).is_some() {
         rg_argv(pattern, &path, glob)
@@ -57,7 +70,14 @@ pub async fn run(args: &Value, ctx: &ToolContext) -> ToolResult {
                         .or_else(|| l.strip_prefix(".\\"))
                         .unwrap_or(l)
                 })
+                // belt and braces: nothing from inside .git, however it got matched
+                .filter(|l| {
+                    !l.starts_with(".git/") && !l.starts_with(".git\\") && !l.contains("/.git/")
+                })
                 .collect();
+            if lines.is_empty() {
+                return ToolResult::ok("no matches");
+            }
             let mut out = lines
                 .iter()
                 .take(MAX_LINES)
@@ -84,6 +104,8 @@ fn rg_argv(pattern: &str, path: &str, glob: Option<&str>) -> Vec<String> {
     if let Some(glob) = glob {
         argv.extend(["-g".into(), glob.into()]);
     }
+    // After the user's glob: the later glob wins in rg, so .git stays out whatever came before.
+    argv.extend(["-g".into(), "!.git".into()]);
     argv.extend(["-e".into(), pattern.into(), "--".into(), path.into()]);
     argv
 }

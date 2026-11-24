@@ -819,15 +819,19 @@ registry; any for the individual tools
     - Join with the root and normalize lexically (`.` and `..` resolved without touching the disk).
       The result must be the root or under it, compared component by component
       (case-insensitively on Windows). An absolute `rel` that lands outside fails the same check.
-    - No path segment may be `.git`.
-    - The deepest part of the path that exists (by `symlink_metadata`, so a dangling link counts)
-      is canonicalized (`dunce::canonicalize`) and must also be under the canonical root, so a
-      symlink anywhere on the path can't lead out. A link that leads nowhere is refused: writing
-      through it would create its target, wherever that is.
+    - No path segment may be `.git`. On Windows, no segment may contain `:` (an alternate data
+      stream) or end in `.` or a space (Windows drops those: `.git.` is `.git`).
+    - **Then the real path:** the deepest part that exists (by `symlink_metadata`, so a dangling
+      link counts) is canonicalized (`dunce::canonicalize`) and the rest put back on. That real
+      path must be under the canonical root and not in `.git`, and **the scope check runs on it
+      too**. So a link anywhere on the path is judged by where it leads: `src/hooks ->
+      ../.git/hooks` is refused, and so is `docs/code -> ../src` for a `docs/**` scope. A link
+      that leads nowhere is refused: writing through it would create its target, wherever that is.
+      `resolve` returns the real path.
   - **For writes, the path must also match `write_scope`:**
     - a `globset::GlobSet` built with `GlobBuilder::new(p).literal_separator(true)` (so `*` doesn't
       cross `/`), case-insensitive on Windows;
-    - test the path relative to the root, with forward slashes;
+    - test the real path relative to the root, with forward slashes;
     - an empty scope refuses every write.
 - **`ToolContext::new(root, order, config, env, cancel)`** builds the guard, the policy and the
   runner; `ctx.git()` gives a `Git` on the same runner.
@@ -848,7 +852,9 @@ registry; any for the individual tools
   - `list_dir`: directories at the last level show a count, `tools/  (12 files)`.
   - `grep`: `rg` prints `./path` for `.`, so a leading `./` (or `.\`) is stripped. For `git grep`,
     a glob without `/` gets `**/` in front so it matches at any depth, as `rg -g` does; with a path
-    it's `:(glob)PATH/**/GLOB`.
+    it's `:(glob)PATH/**/GLOB`. The glob only narrows the search (rg's `-g` overrides its ignore
+    rules), so a glob with `..`, `.git`, `:` or a leading `/` is refused; rg also gets `-g !.git`
+    after it, and result lines under `.git/` are dropped.
   - `read_file`: a `start` past the end is an error.
   - `edit_file`: an empty `old`, or a file that isn't UTF-8, is an error; the lines shown are the
     new text plus 3 lines on each side.
@@ -1172,4 +1178,5 @@ before a stop.
 | Checks too slow, so repairs eat the time budget | let orders use narrower checks (one test module); `max_minutes` per order |
 | Windows path and CRLF differences | CI on Windows from T01; CRLF handling in `edit_file`; case-insensitive paths; `dunce` |
 | A timed-out check leaves grandchildren running (a test server, a compiler) | `process-wrap` kills the whole tree: process group on Unix, Job Object on Windows |
+| The allow-list is taken for a sandbox | it isn't: it stops accidents (`git push`, `rm`), not a hostile grunt. Allowed commands have flags that run programs (`git grep -O`, `cargo --config build.rustc-wrapper=…`), and checks run code the grunt wrote. The real boundary is bubblewrap (v0.3); until then, the worktree, the path guard and the scrubbed environment limit the damage, and the docs say so |
 | Rust takes longer to write, and local models write worse Rust than Go or Python | keep orders on this repo small and well scoped; compiler errors come back as check output, which is a good repair signal |
