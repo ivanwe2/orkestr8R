@@ -355,7 +355,7 @@ The worktree lives in `.ork/worktrees/<id>`, on branch `ork/<id>`.
 
 **Files**
 - `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`
-- `.gitignore` (`/target`, `.ork/`) and `.editorconfig`
+- `.gitignore` (`/target`, `.ork/`), `.gitattributes` (`* text=auto eol=lf`) and `.editorconfig`
 - `.github/workflows/ci.yml`
 - `src/main.rs`, `src/lib.rs`, `src/env.rs`, `src/io.rs`, `src/cli/mod.rs`, `src/cli/exit.rs`
 - `scripts/dcargo.sh` (cargo in a rust container, for machines that can't link natively)

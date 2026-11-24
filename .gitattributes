@@ -1,0 +1,2 @@
+# LF everywhere, on every OS (shell scripts break with CRLF; tests expect LF fixtures)
+* text=auto eol=lf
