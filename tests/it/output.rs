@@ -314,3 +314,34 @@ fn the_file_sink_appends_one_line_per_event() {
     assert_eq!(events, vec![start(), OrkEvent::Repair { attempt: 1 }]);
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[test]
+fn human_lines_escape_control_characters_from_the_model() {
+    let (out, captured) = SharedWriter::capture();
+    let sink = HumanSink::new(out);
+
+    sink.emit(&OrkEvent::Finish {
+        turn: 2,
+        summary: "done\x1b[2J\x1b]0;pwned\x07 \r ok".into(),
+    });
+    sink.emit(&OrkEvent::Result {
+        status: "error".into(),
+        exit_code: 1,
+        job: None,
+        report: None,
+        data: None,
+        error: Some("two problems:\n  roles.grunt: missing\x1b[31m".into()),
+    });
+
+    let text = captured.text();
+    assert!(
+        !text.contains('\x1b') && !text.contains('\x07') && !text.contains('\r'),
+        "{text:?}"
+    );
+    assert!(text.contains(r"done\u{1b}[2J"), "{text:?}");
+    // newlines in a multi-line error stay readable
+    assert!(
+        text.contains("error: two problems:\n  roles.grunt: missing\\u{1b}[31m\n"),
+        "{text:?}"
+    );
+}

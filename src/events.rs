@@ -326,9 +326,24 @@ impl EventSink for HumanSink {
             }
         };
         if let Some(line) = line {
-            self.out.write_line(&line);
+            self.out.write_line(&clean(&line));
         }
     }
+}
+
+/// `text` with control characters (ESC, CR, DEL, C1, …) escaped, so text from the model can't
+/// drive the terminal (move the cursor, rewrite the line, change colours). Newlines and tabs stay.
+/// JSON output needs no such step: serde_json escapes control characters itself.
+fn clean(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if c.is_control() && c != '\n' && c != '\t' {
+            out.extend(c.escape_default());
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// 212 → "212", 6120 → "6.1k", 1_250_000 → "1.2M".
