@@ -26,7 +26,7 @@ task at a time and finish it without asking.
 
 - [x] T01 Scaffold the package
 - [x] T02 JSON, events and CLI output
-- [ ] T03 Config and `ork init`
+- [x] T03 Config and `ork init`
 - [ ] T04 Model client and fake model server
 - [ ] T05 `ork doctor` and `ork models`
 - [ ] T06 `ork ask`
@@ -503,7 +503,7 @@ passed · 11 turns · 1 repair · 61.2k in / 4.8k out
   - role `grunt` exists;
   - every role's server exists, and its `server` and `model` aren't empty;
   - URLs start with `http://` or `https://` and have a host;
-  - numbers are > 0.
+  - numbers are > 0, except `max_repairs` (0 = no repair turns) and `temperature` (0 or more).
 - **API key:** `env[key_env]` when `key_env` is set. Never read a key from the file.
 - **`ork init --url URL --model MODEL [--key-env VAR] [--context-tokens N] [--user] [--force]`:**
   - Writes `servers.box` and `roles.grunt` to the repo file, or to the user file with `--user`
@@ -517,7 +517,8 @@ passed · 11 turns · 1 repair · 61.2k in / 4.8k out
   - Adds `.ork/` to `<git common dir>/info/exclude` if it's missing (repo file only), with
     `git::add_exclude(root)`: `git rev-parse --git-common-dir` through `std::process::Command`, then
     append. T08 moves it onto the `Git` struct.
-  - Refuses to overwrite without `--force`.
+  - Refuses to overwrite without `--force`, and refuses to write a config that fails validation
+    (e.g. a bad `--url`), listing the problems.
   - `result.data` = `{ "path": "…" }`.
 
 **Tests** (`tests/it/config.rs`)
