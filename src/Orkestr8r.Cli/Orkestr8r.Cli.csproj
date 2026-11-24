@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Orkestr8r.Cli</RootNamespace>
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>ork</ToolCommandName>
+    <PackageId>orkestr8r</PackageId>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)../../artifacts</PackageOutputPath>
+    <Description>Frontier plans, local executes: run coding orders on your own models, in git worktrees, checked with real commands.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Orkestr8r.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.15" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Orkestr8r.Core\Orkestr8r.Core.csproj" />
+  </ItemGroup>
+
+</Project>

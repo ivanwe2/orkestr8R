@@ -22,7 +22,7 @@ OpenCode on Ivan's local model, can pick up one task at a time and finish it wit
 
 ## Progress
 
-- [ ] T01 Scaffold the solution
+- [x] T01 Scaffold the solution
 - [ ] T02 JSON, events and CLI output
 - [ ] T03 Config and `ork init`
 - [ ] T04 Model client and fake model server
