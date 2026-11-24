@@ -69,6 +69,9 @@ Ivan sets the value above. It decides who merges a PR into `main`:
 - Rust, edition 2024, the toolchain pinned in `rust-toolchain.toml`. `cargo fmt --check` and
   `cargo clippy --all-targets --all-features -- -D warnings` are clean; run the tests with
   `cargo test --all-features`.
+  - **Ivan's laptop (Windows) has no MSVC build tools, so Rust can't link there natively.** Run
+    cargo in Docker instead: `scripts/dcargo.sh test --all-features` (same arguments as `cargo`).
+    CI covers native Windows.
 - **The CLI contract is a contract** (docs/cli.md): with `--json`, stdout carries JSON Lines and
   the last line is always `result`; messages for people go to stderr. Exit codes: 0 done, 1 error,
   3 waiting for a human, 4 finished but checks failed. Change the doc in the same PR as the code; a

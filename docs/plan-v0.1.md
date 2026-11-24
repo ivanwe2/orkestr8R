@@ -24,7 +24,7 @@ task at a time and finish it without asking.
 
 ## Progress
 
-- [ ] T01 Scaffold the package
+- [x] T01 Scaffold the package
 - [ ] T02 JSON, events and CLI output
 - [ ] T03 Config and `ork init`
 - [ ] T04 Model client and fake model server
@@ -181,6 +181,8 @@ rust-toolchain.toml
 src/
   main.rs                  Ctrl+C → CancellationToken, then cli::run
   lib.rs
+  env.rs                   Env: the environment as a value (case-insensitive names on Windows)
+  io.rs                    SharedWriter: stdout/stderr shared by commands and sinks, capturable in tests
   config.rs                OrkConfig, loading, merging, validation
   events.rs                OrkEvent, EventSink, JsonLinesSink, HumanSink, FileSink, CompositeSink
   orders.rs                Order, OrderMode, validate, Report and its parts, JobStatus
@@ -355,7 +357,8 @@ The worktree lives in `.ork/worktrees/<id>`, on branch `ork/<id>`.
 - `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`
 - `.gitignore` (`/target`, `.ork/`) and `.editorconfig`
 - `.github/workflows/ci.yml`
-- `src/main.rs`, `src/lib.rs`, `src/cli/mod.rs`, `src/cli/exit.rs`
+- `src/main.rs`, `src/lib.rs`, `src/env.rs`, `src/io.rs`, `src/cli/mod.rs`, `src/cli/exit.rs`
+- `scripts/dcargo.sh` (cargo in a rust container, for machines that can't link natively)
 - `src/bin/ork-testtool.rs`
 - `tests/it/main.rs`, `tests/it/scaffold.rs`
 
@@ -368,7 +371,8 @@ The worktree lives in `.ork/worktrees/<id>`, on branch `ork/<id>`.
   - `[lints.rust] unsafe_code = "forbid"`.
   - Dependencies: `clap` (derive), `tokio` (macros, rt-multi-thread, signal, process, time, fs,
     io-util, sync), `tokio-util`, `anyhow`.
-- **`rust-toolchain.toml`:** a pinned stable channel, with `rustfmt` and `clippy`.
+- **`rust-toolchain.toml`:** an exact stable version (`1.99.1`, not `1.99`: rustup treats those as
+  different toolchains), with `rustfmt` and `clippy`.
 - **`main.rs`** is a few lines: a `CancellationToken` cancelled by `tokio::signal::ctrl_c()`, then
   `std::process::exit(cli::run(args, CliIo::stdio(), cwd, Env::from_process(), cancel).await)`.
 - **`cli::run(args: Vec<String>, io: CliIo, cwd: PathBuf, env: Env, cancel: CancellationToken) -> i32`:**

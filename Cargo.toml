@@ -1,0 +1,33 @@
+[package]
+name = "orkestr8r"
+version = "0.1.0-dev"
+edition = "2024"
+rust-version = "1.99.1"
+description = "Frontier plans, local executes: run coding orders on your own models, in git worktrees, checked with real commands."
+license = "MIT"
+repository = "https://github.com/ivanwe2/orkestr8R"
+publish = false
+default-run = "ork"
+
+[[bin]]
+name = "ork"
+path = "src/main.rs"
+
+# The helper program the process tests run (sleep, print, exit, env). Behind a feature so
+# `cargo install` never installs it; tests run with `--all-features`.
+[[bin]]
+name = "ork-testtool"
+path = "src/bin/ork-testtool.rs"
+required-features = ["testtool"]
+
+[features]
+testtool = []
+
+[dependencies]
+anyhow = "1.0.105"
+clap = { version = "4.6.9", features = ["derive"] }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "signal", "process", "time", "fs", "io-util", "sync"] }
+tokio-util = "0.7.20"
+
+[lints.rust]
+unsafe_code = "forbid"
