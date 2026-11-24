@@ -55,9 +55,9 @@ The chief spends its tokens on judgment. Your GPUs do the volume.
 
 ## Planned stack
 
-.NET 10 / C# for the core, the CLI and MCP (official MCP C# SDK); React + TypeScript for the web UI
-later. Models: any OpenAI-compatible server (llama-server, llama-swap, Ollama, vLLM, LM Studio) or a
-cloud API (OpenRouter).
+Rust: one static binary, `ork`, for the core, the CLI and MCP (the official Rust SDK, `rmcp`);
+React + TypeScript for the web UI later. Models: any OpenAI-compatible server (llama-server,
+llama-swap, Ollama, vLLM, LM Studio) or a cloud API (OpenRouter).
 
 ## License
 

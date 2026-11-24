@@ -4,6 +4,31 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
 
 ## 2026-11-24
 
+- **Stack: Rust, not .NET/C#** (replaces the 2026-11-23 decision). Ivan: C# is too boring for
+  this; Rust is his pick if it fits, Go the alternative. It fits:
+  - one static binary `ork`, no runtime to install on the laptop or the GPU box;
+  - serde maps the contracts 1:1 (one internally tagged enum is exactly the JSON Lines events);
+  - the pieces exist and are first-rate: clap, tokio, reqwest, `globset` (from ripgrep), axum
+    for the fake server and later `ork serve`, and the official MCP SDK `rmcp`, which implements
+    MCP 2026-07-28 with long-running Tasks;
+  - localdub's server is already Rust.
+  - The cost: slower to write, and local models write worse Rust than Go or Python, which matters
+    when the grunt works on this repo (T16).
+  - **No Python.** Its pull is the LLM and agent libraries, which the plan avoids on purpose, and a
+    second language breaks the one-binary story. Maybe later for the v0.3 eval analysis.
+- **The Rust shape** (details in docs/plan-v0.1.md):
+  - one package: a library plus the `ork` binary; tests in one integration-test binary,
+    `tests/it/`;
+  - `anyhow` for errors; tool failures are results the model reads, not Rust errors;
+  - `ModelClient` is a plain struct, not a trait: tests swap the server, not the client;
+  - tools are a closed `enum Tool` dispatched with `match`, no trait objects;
+  - the process-test helper is a second binary, `ork-testtool`, behind the `testtool` feature, so
+    `cargo install` never installs it;
+  - `process-wrap` kills whole process trees (process group on Unix, Job Object on Windows);
+  - CI runs on pull requests and on pushes to `main`.
+- **Process environment:** the allow-list no longer passes every `NUGET_*` variable (they can carry
+  tokens, e.g. `NUGET_AUTH_TOKEN`); it passes named toolchain variables instead (`CARGO_HOME`,
+  `RUSTUP_HOME`, `GOPATH`, `NUGET_PACKAGES`, …) plus `DOTNET_*`.
 - **License: MIT**, like localdub (`LICENSE`, copyright ivanwe2).
 - **Merges into `main` are configurable, in AGENTS.md** (`merge_policy: ivan | frontier | any`).
   It's set to `frontier`:
@@ -16,12 +41,12 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
 - **v0.1 is the CLI with blocking runs** (docs/plan-v0.1.md). Calling `ork` from the shell, with
   the skill, is the default way in. Running in the background and over MCP comes together in v0.2,
   since MCP mostly matters for long calls (MCP Tasks).
-- **Model calls use raw `HttpClient` + `System.Text.Json`**, not Microsoft.Extensions.AI or the
-  OpenAI SDK.
+- **Model calls use a raw HTTP client + JSON** (now `reqwest` + `serde_json`), not an LLM SDK or
+  agent framework.
   - The wire JSON stays visible, which is the learning goal.
   - We get full control over malformed arguments, think blocks, tool calls written into the text,
     and llama.cpp extras.
-  - It can sit behind `IChatClient` later.
+  - It can sit behind a trait later, if a second kind of client appears.
 - **Job state is files in `.ork/jobs/<id>/`, not SQLite.** SQLite only if the v0.2 daemon needs it.
 - **Commands run without a shell.** The command line is split into arguments, allowed by token
   prefix, and refused if it has shell metacharacters. Checks pass the same policy.
@@ -29,8 +54,8 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
   match, once). Whole-file rewrites are where local models mangle code.
 - **`.ork/` goes into `.git/info/exclude`**, so the user's `.gitignore` stays untouched.
 - **Tests:**
-  - The CLI runs in-process (`CliApp.RunAsync`).
-  - A fake OpenAI-compatible server (Kestrel on port 0) replies from scripts.
+  - The CLI runs in-process (`cli::run`).
+  - A fake OpenAI-compatible server (axum on port 0) replies from scripts.
   - `git grep` is the check command, so tests are fast and the same on Linux and Windows.
 - **The ACP and A2A order.** Handing a task over like a tool call is MCP and the CLI (the agent as a
   tool). ACP (other harnesses as grunts) comes in iteration 2, A2A only if orkestr8R goes networked
@@ -60,8 +85,8 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
   distinct from is Orkestra (andyyaro/orkestra).
 - **Brand: an original orc head.** Its topknot is three nodes: one amber chief over two green grunts
   (docs/brand.md).
-- **Stack: .NET 10 / C#** for the core, CLI and MCP (official MCP C# SDK 2.x), shipped as a dotnet
-  tool. Ivan's strongest stack, and it stands apart from the Python and TypeScript tools in this space.
+- ~~**Stack: .NET 10 / C#** for the core, CLI and MCP (official MCP C# SDK 2.x), shipped as a dotnet
+  tool.~~ Replaced on 2026-11-24: Rust.
 - **Every job in its own git worktree; checks judged by exit codes; bounded repair turns.**
 - **Jobs run in-process in iteration 1** (inside `ork mcp` / `ork run`); the `ork serve` daemon comes
   in iteration 2.

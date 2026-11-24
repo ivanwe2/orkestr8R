@@ -6,7 +6,7 @@ Claude Code reads this through `CLAUDE.md`; OpenCode and other agents read it di
 
 - Ivan wants to **learn how agent loops and harnesses work** while building this. When you build the
   grunt loop (docs/agent-loop.md) or anything around it, explain each piece as it goes in: what it
-  does, why it's there, and the C# idiom used. Briefly, as the work goes, no lectures up front.
+  does, why it's there, and the Rust idiom used. Briefly, as the work goes, no lectures up front.
 - He values directness and precise, concise answers. Pragmatic, minimal configuration. Don't build
   things that aren't needed yet.
 - When he has to run something, say exactly which command and on which machine (laptop or the GPU
@@ -60,13 +60,15 @@ Ivan sets the value above. It decides who merges a PR into `main`:
 
 | Path | What |
 |---|---|
-| `src/Orkestr8r.Core/` | the grunt loop, tools, orders and reports, jobs, worktrees, checks, model servers |
-| `src/Orkestr8r.Cli/` | `ork`: every command, `--json` events; `ork mcp` (the MCP server over stdio) from v0.2 |
-| `tests/` | unit tests, and end-to-end runs of the loop against a fake model server; `Orkestr8r.TestTool` for process tests |
+| `src/` | one Rust package: the library (the grunt loop, tools, orders and reports, jobs, worktrees, checks, the model client) and the `ork` binary |
+| `src/cli/` | `ork`: every command, `--json` events; `ork mcp` (the MCP server over stdio) from v0.2 |
+| `tests/it/` | one integration-test binary: unit-level tests, and end-to-end runs of the loop against a fake model server; `ork-testtool` (feature `testtool`) for process tests |
 | `skills/orkestr8r/SKILL.md` | the Agent Skill that points agents to `ork guide` |
 | `docs/` | the plan and the contracts |
 
-- .NET 10, C#, nullable on, warnings as errors.
+- Rust, edition 2024, the toolchain pinned in `rust-toolchain.toml`. `cargo fmt --check` and
+  `cargo clippy --all-targets --all-features -- -D warnings` are clean; run the tests with
+  `cargo test --all-features`.
 - **The CLI contract is a contract** (docs/cli.md): with `--json`, stdout carries JSON Lines and
   the last line is always `result`; messages for people go to stderr. Exit codes: 0 done, 1 error,
   3 waiting for a human, 4 finished but checks failed. Change the doc in the same PR as the code; a

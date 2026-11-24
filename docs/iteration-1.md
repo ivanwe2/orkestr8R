@@ -12,7 +12,7 @@ orkestr8R checks it and reports back, and nobody copy-pastes anything.
 - The `ork` CLI with `--json` and exit codes (docs/cli.md); `ork mcp` over stdio.
 - The grunt loop with file and shell tools in a git worktree (docs/agent-loop.md).
 - Checks run by orkestr8R, plus a bounded repair loop.
-- Jobs in SQLite; transcripts and events as JSONL files.
+- Jobs as files under `.ork/jobs/`: state, events and transcripts (JSON and JSONL).
 - `ork guide`, `skills/orkestr8r/SKILL.md`, and `ork init` writing the delegation rules.
 
 **Out, for later**
@@ -27,7 +27,7 @@ orkestr8R checks it and reports back, and nobody copy-pastes anything.
 flowchart TB
   chief([chief: Claude Code / OpenCode]) -- "ork … --json (Bash + skill)<br>or MCP tools" --> core
   subgraph ork [ork]
-    core[jobs + orders<br>SQLite, one at a time] --> grunt[grunt loop]
+    core[jobs + orders<br>files, one at a time] --> grunt[grunt loop]
     grunt --> tools[tools in the worktree<br>read · list · grep · write · edit · run · finish]
     grunt --> checks[checks<br>orkestr8R runs them, exit codes]
     checks -- failed: repair turn --> grunt
@@ -36,7 +36,7 @@ flowchart TB
   checks --> report([report, ~400 tokens]) --> chief
 ```
 
-- `ork mcp` runs the jobs in-process: a background worker on a `Channel<T>`, one job at a time.
+- `ork mcp` runs the jobs in-process: a background tokio task fed by a channel, one job at a time.
   Simple, but jobs end when the chief's session closes. Iteration 2's `ork serve` fixes that.
 - Every job: worktree `.ork/worktrees/<id>` on branch `ork/<id>`, from the current HEAD.
 - Every job writes `.ork/jobs/<id>/events.jsonl` (the same events `--json` prints) and
@@ -105,14 +105,14 @@ defaults. `ork init` writes it; `ork models` changes it.
 
 ## Stack
 
-- .NET 10 / C#, distributed as a `dotnet tool` (`dotnet tool install -g orkestr8r`, command `ork`).
-  AOT binaries and a Docker image come in iteration 2.
-- MCP: the official C# SDK, `ModelContextProtocol` 2.x (MCP 2026-07-28), with
-  `ModelContextProtocol.Extensions.Tasks` for long calls.
-- Model calls: raw `HttpClient` + `System.Text.Json` against the OpenAI-compatible API (decided
-  2026-11-24, see docs/decisions.md). The loop is ours.
+- Rust (decided 2026-11-24, see docs/decisions.md): one static binary `ork`, installed with
+  `cargo install` or downloaded from a GitHub release. A Docker image comes in iteration 2.
+- MCP: the official Rust SDK, `rmcp` 3.x, which implements MCP 2026-07-28 including long-running
+  Tasks.
+- Model calls: raw `reqwest` + `serde_json` against the OpenAI-compatible API. The loop is ours.
+- tokio for async, processes and timeouts; clap for the CLI.
 - Job state as files in v0.1; SQLite only if the v0.2 daemon needs it. Git through the `git`
-  command (worktrees, diffs). `System.CommandLine` 2.0 for the CLI.
+  command (worktrees, diffs).
 
 ## Milestones
 
@@ -121,7 +121,7 @@ defaults. `ork init` writes it; `ork models` changes it.
 | **M0** | Skeleton: solution, the fake model server for tests, `ork doctor` (server up, tool calling works, git ok), `ork ask`, `ork mcp` with `ork_ask` | `ork ask` answers about a file from Claude Code and from OpenCode |
 | **M1** | The grunt loop, standalone: `ork run` with worktree, tools, finish, events, transcript. The learning milestone: built step by step (docs/agent-loop.md) | 5 hand-written orders on a real repo, run without a chief |
 | **M2** | Checks, repair turns, the report, exit codes 0/3/4 | a failing test fixed in a repair turn, shown in the events |
-| **M3** | Jobs: background jobs, `jobs/status/watch/diff/apply/discard`, SQLite, the MCP tools, MCP Tasks | Claude Code delegates, keeps working, applies the result |
+| **M3** | Jobs: background jobs, `jobs/status/watch/diff/apply/discard`, the MCP tools, MCP Tasks | Claude Code delegates, keeps working, applies the result |
 | **M4** | Agents use it on their own: `ork guide`, the skill, `ork init` (config, delegation rules for AGENTS.md / CLAUDE.md, MCP registration), the guide test | the chief delegates without being told to in the prompt |
 | **M5** | Prove it: 10 real tasks with and without orkestr8R | numbers for chief tokens, grunt pass rate, repairs used, wall-clock time |
 

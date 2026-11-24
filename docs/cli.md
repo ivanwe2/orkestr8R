@@ -38,6 +38,7 @@ ork init                                   (v0.2) also writes delegation rules f
 ork models --set ROLE=SERVER/MODEL         (later) change a role's model
 ork models --server NAME --url URL [--key-env VAR] [--remove]
                                            (later) add, change or remove a server
+```
 
 ## Exit codes
 
@@ -54,7 +55,7 @@ Every command takes `--json`. Messages for people go to stderr. stdout carries o
 line, and the last line is always `result`.
 
 ```
-{"event": "start", "command": "run", "job": "k7f2", "branch": "ork/k7f2", "worktree": ".ork/worktrees/k7f2", "role": "grunt", "model": "qwen-27b"}
+{"event": "start", "command": "run", "job": "k7f2", "branch": "ork/k7f2", "worktree": ".ork/worktrees/k7f2", "role": "grunt", "model": "qwen-27b", "server": "box"}
 {"event": "call", "turn": 1, "model": "qwen-27b", "server": "box", "tokens_in": 6120, "tokens_out": 212, "seconds": 4.1, "tokens_per_second": 51.7}
 {"event": "tool", "turn": 1, "name": "read_file", "args": {"path": "src/Orders/OrderQuery.cs"}, "ok": true, "ms": 3}
 {"event": "tool", "turn": 6, "name": "edit_file", "args": {"path": "src/Orders/OrderQuery.cs"}, "ok": true, "ms": 2}
@@ -67,7 +68,7 @@ line, and the last line is always `result`.
 
 | Event | When |
 |---|---|
-| `start` | the command started; for `run`: job, branch, worktree, model |
+| `start` | the command started; for `run`: job, branch, worktree, role, model, server |
 | `call` | every model request: model, server, tokens in/out, seconds, tokens per second |
 | `tool` | every tool call: name, short args, ok, ms (errors carry `error`) |
 | `finish` | the grunt called `finish` |
