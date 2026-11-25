@@ -10,7 +10,8 @@ use serde_json::json;
 use crate::cli::{CliContext, CommandResult};
 use crate::config::{self, OrkConfig};
 use crate::events::OrkEvent;
-use crate::git;
+use crate::git::Git;
+use crate::process::ProcessRunner;
 
 #[derive(Debug, Args)]
 pub struct InitArgs {
@@ -94,7 +95,9 @@ pub async fn run(ctx: &CliContext, args: InitArgs) -> anyhow::Result<CommandResu
     std::fs::write(&path, serde_json::to_string_pretty(&file)? + "\n")
         .with_context(|| format!("writing {}", path.display()))?;
     if let (false, Some(root)) = (args.user, &root) {
-        git::add_exclude(root, ".ork/")?;
+        Git::new(ProcessRunner::new(ctx.env.clone()))
+            .add_exclude(root, ".ork/")
+            .await?;
     }
 
     ctx.say(&format!("wrote {}", path.display()));

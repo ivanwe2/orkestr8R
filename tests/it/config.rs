@@ -22,7 +22,9 @@ impl Setup {
         let dir = TempDir::new().unwrap();
         fs::create_dir_all(dir.path().join("repo/.git")).unwrap();
         let config_home = dir.path().join("config").display().to_string();
-        let env = Env::default()
+        // the real environment (PATH finds git), minus ORK_CONFIG, with the user file in config/
+        let process = Env::from_process();
+        let env = Env::from_pairs(process.iter().filter(|(name, _)| *name != "ORK_CONFIG"))
             .with("APPDATA", &config_home)
             .with("XDG_CONFIG_HOME", &config_home);
         Self { dir, env }

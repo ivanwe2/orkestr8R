@@ -3,4 +3,5 @@
 
 pub mod cli;
 pub mod fake_server;
+pub mod temp_repo;
 pub mod workspace;

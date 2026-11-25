@@ -1,16 +1,16 @@
 //! A temp git repo plus an `ORK_CONFIG` file pointing at a (fake) server: the setting for
 //! end-to-end command tests.
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 use orkestr8r::env::Env;
 use serde_json::{Value, json};
-use tempfile::TempDir;
+
+use super::temp_repo::TempRepo;
 
 pub struct Workspace {
-    pub dir: TempDir,
-    /// The repo, `git init`ed, with an identity and `core.autocrlf false`.
+    pub temp: TempRepo,
+    /// The repo (the same as `temp.path`).
     pub repo: PathBuf,
     pub config_path: PathBuf,
     /// The real environment (so PATH finds git) with `ORK_CONFIG` set.
@@ -29,52 +29,32 @@ impl Workspace {
     }
 
     pub fn with_config(config: Value) -> Self {
-        let dir = TempDir::new().unwrap();
-        let repo = dir.path().join("repo");
-        std::fs::create_dir_all(&repo).unwrap();
-        git(&repo, &["init", "-q"]);
-        git(&repo, &["config", "core.autocrlf", "false"]);
-        git(&repo, &["config", "user.name", "test"]);
-        git(&repo, &["config", "user.email", "test@localhost"]);
-
-        let config_path = dir.path().join("ork.json");
+        let temp = TempRepo::new();
+        let config_path = temp.dir.path().join("ork.json");
         std::fs::write(&config_path, serde_json::to_string_pretty(&config).unwrap()).unwrap();
         let env = Env::from_process().with("ORK_CONFIG", config_path.display().to_string());
         Self {
-            dir,
-            repo,
+            repo: temp.path.clone(),
+            temp,
             config_path,
             env,
         }
     }
 
+    /// The temp directory around the repo.
+    pub fn dir(&self) -> &std::path::Path {
+        self.temp.dir.path()
+    }
+
     /// Writes a file in the repo (creating directories).
     pub fn write(&self, rel: &str, content: &str) -> PathBuf {
-        let path = self.repo.join(rel);
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, content).unwrap();
-        path
+        self.temp.write(rel, content)
     }
 
     /// `git add -A && git commit -m message` in the repo.
     pub fn commit(&self, message: &str) {
-        git(&self.repo, &["add", "-A"]);
-        git(&self.repo, &["commit", "-q", "-m", message]);
+        self.temp.commit(message);
     }
-}
-
-pub fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(dir)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "git {args:?} failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
 /// The stdout of a `--json` command, one parsed event per line.
