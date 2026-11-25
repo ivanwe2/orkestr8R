@@ -71,6 +71,30 @@ async fn a_text_reply_fails_tool_calling_with_a_hint() {
 }
 
 #[tokio::test]
+async fn a_server_error_fails_tool_calling_with_a_server_hint() {
+    let server = FakeModelServer::start(Script::new().status(502)).await;
+    let ws = Workspace::new(&server.base_url(), &["git status"]);
+
+    let out = run_cli(&["doctor", "--json"], &ws.repo, ws.env.clone()).await;
+
+    assert_eq!(out.code, exit::ERROR);
+    let checks = checks(&out.stdout);
+    let tool_calling = check(&checks, "tool_calling");
+    assert_eq!(tool_calling["ok"], false);
+    assert!(
+        tool_calling["hint"]
+            .as_str()
+            .unwrap()
+            .contains("the server failed while answering")
+    );
+    assert!(
+        !tool_calling["detail"].as_str().unwrap().ends_with(": "),
+        "{}",
+        tool_calling["detail"]
+    );
+}
+
+#[tokio::test]
 async fn a_server_that_is_down_fails_server_and_tool_calling() {
     let ws = Workspace::new(&unreachable_url().await, &["git status"]);
 

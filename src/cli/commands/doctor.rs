@@ -242,11 +242,16 @@ async fn check_tool_calling(client: &ModelClient, temperature: f64, max_tokens: 
                 HINT,
             )
         }
-        Err(err) => Check::fail(
-            "tool_calling",
-            format!("{err:#}"),
-            "fix the server check first",
-        ),
+        Err(err) => {
+            let message = format!("{err:#}");
+            let hint = if message.contains("the server answered 5") {
+                "the server failed while answering: the model may have crashed or run out of \
+                 memory; look at the server's logs (llama-swap: GET /logs)"
+            } else {
+                "fix the server check first"
+            };
+            Check::fail("tool_calling", message, hint)
+        }
     }
 }
 
