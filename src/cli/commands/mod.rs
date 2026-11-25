@@ -1,6 +1,7 @@
 //! One module per command. Each has an `Args` struct (clap) and
 //! `async fn run(ctx: &CliContext, args) -> anyhow::Result<CommandResult>`.
 
+pub mod ask;
 pub mod doctor;
 pub mod init;
 pub mod models;
