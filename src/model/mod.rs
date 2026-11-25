@@ -161,9 +161,9 @@ impl ModelClient {
                             return Ok((text, started.elapsed().as_secs_f64()));
                         }
                         Ok(text) if retryable(status) => {
-                            anyhow!("the server answered {status}: {}", snippet(&text))
+                            anyhow!(server_error(status, &text))
                         }
-                        Ok(text) => bail!("the server answered {status}: {}", snippet(&text)),
+                        Ok(text) => bail!(server_error(status, &text)),
                         Err(err) => anyhow!(err).context("reading the reply"),
                     }
                 }
@@ -187,6 +187,16 @@ impl ModelClient {
 
 fn retryable(status: StatusCode) -> bool {
     status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+}
+
+/// The error for a non-success status: the body is left out when it's empty.
+fn server_error(status: StatusCode, text: &str) -> String {
+    let body = snippet(text);
+    if body.is_empty() {
+        format!("the server answered {status}")
+    } else {
+        format!("the server answered {status}: {body}")
+    }
 }
 
 /// The first 500 characters, for error messages.
