@@ -32,6 +32,10 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
   check runs code the grunt wrote. Deny-listing flags would be whack-a-mole. The real boundary is
   OS isolation (bubblewrap, v0.3); until then: the worktree, the path guard, the scrubbed
   environment, and not running orkestr8R on code you wouldn't run yourself.
+- **Nothing from disk or the model is trusted on the way out** (from a security review of T14):
+  job ids and job files are checked before they reach a path or a git argument (a cloned repo
+  could carry its own `.ork/`), git calls put revisions after `--end-of-options`, and every line
+  shown to people is cleaned of control characters (`text::clean`).
 - **The path guard judges the real path.** The `.git` and scope checks run on the canonical path
   (the existing part canonicalized, the rest put back on), so a link is judged by where it leads.
 - **A repo's `ork.json` can't direct API keys.** A key is only sent to a server whose `url` and

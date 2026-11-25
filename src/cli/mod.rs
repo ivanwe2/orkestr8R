@@ -49,6 +49,18 @@ pub enum Commands {
     Ask(commands::ask::AskArgs),
     /// Run one order: worktree, grunt loop, checks, report (flags override the file)
     Run(commands::run::RunArgs),
+    /// Every job, newest first
+    Jobs,
+    /// One job: status, the last event while running, the report when done
+    Status(commands::jobs::JobArg),
+    /// The job's changes
+    Diff(commands::jobs::DiffArgs),
+    /// The transcript: every message to and from the model
+    Logs(commands::jobs::JobArg),
+    /// Merge the job's branch into the current branch, then clean up
+    Apply(commands::jobs::ApplyArgs),
+    /// Drop the worktree and the branch
+    Discard(commands::jobs::JobArg),
 }
 
 /// The clap command tree (T15's sync test enumerates its subcommands).
@@ -99,6 +111,12 @@ pub async fn run(
         Commands::Models(args) => complete(&ctx, commands::models::run(&ctx, args)).await,
         Commands::Ask(args) => complete(&ctx, commands::ask::run(&ctx, args)).await,
         Commands::Run(args) => complete(&ctx, commands::run::run(&ctx, args)).await,
+        Commands::Jobs => complete(&ctx, commands::jobs::jobs(&ctx)).await,
+        Commands::Status(args) => complete(&ctx, commands::jobs::status(&ctx, args)).await,
+        Commands::Diff(args) => complete(&ctx, commands::jobs::diff(&ctx, args)).await,
+        Commands::Logs(args) => complete(&ctx, commands::jobs::logs(&ctx, args)).await,
+        Commands::Apply(args) => complete(&ctx, commands::jobs::apply(&ctx, args)).await,
+        Commands::Discard(args) => complete(&ctx, commands::jobs::discard(&ctx, args)).await,
     }
 }
 

@@ -4,6 +4,7 @@
 pub mod ask;
 pub mod doctor;
 pub mod init;
+pub mod jobs;
 pub mod models;
 pub mod run;
 

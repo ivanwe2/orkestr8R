@@ -13,6 +13,14 @@ use crate::orders::{JobStatus, Order, Report};
 const ID_ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyz23456789";
 const ID_LENGTH: usize = 4;
 
+/// Whether `id` looks like a job id: 1–32 lower-case letters and digits.
+pub fn is_job_id(id: &str) -> bool {
+    (1..=32).contains(&id.len())
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+}
+
 /// A new 4-character job id; drawn again while `taken(id)` says it's in use.
 pub fn new_job_id(taken: impl Fn(&str) -> bool) -> String {
     loop {
@@ -113,14 +121,34 @@ impl JobStore {
         Ok(state)
     }
 
+    /// The job's state. Checked on the way in, because the id comes from the command line and the
+    /// file from disk (a cloned repo could even carry its own `.ork/`): the id must look like an
+    /// id (no `../`), and the file must describe that job, its branch `ork/<id>`, its worktree
+    /// `.ork/worktrees/<id>` and a hex base sha (no `--option` slipped in for git).
     pub fn load(&self, id: &str) -> anyhow::Result<JobState> {
+        if !is_job_id(id) {
+            bail!("{id:?} is not a job id (ork jobs lists them)");
+        }
         let path = self.paths(id).state;
         if !path.is_file() {
             bail!("no job {id} (ork jobs lists them)");
         }
         let text = std::fs::read_to_string(&path)
             .with_context(|| format!("reading {}", path.display()))?;
-        serde_json::from_str(&text).with_context(|| format!("{} is damaged", path.display()))
+        let state: JobState = serde_json::from_str(&text)
+            .with_context(|| format!("{} is damaged", path.display()))?;
+        let consistent = state.id == id
+            && state.branch == format!("ork/{id}")
+            && state.worktree == format!(".ork/worktrees/{id}")
+            && (1..=64).contains(&state.base_sha.len())
+            && state.base_sha.chars().all(|c| c.is_ascii_hexdigit());
+        if !consistent {
+            bail!(
+                "{} is damaged: it doesn't describe job {id}",
+                path.display()
+            );
+        }
+        Ok(state)
     }
 
     pub fn load_order(&self, id: &str) -> anyhow::Result<Order> {

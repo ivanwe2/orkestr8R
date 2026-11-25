@@ -12,6 +12,7 @@ use crate::env::Env;
 use crate::events::{EventSink, HumanSink, JsonLinesSink, OrkEvent};
 use crate::io::SharedWriter;
 use crate::orders::Report;
+use crate::text;
 
 pub struct CliContext {
     pub stdout: SharedWriter,
@@ -46,7 +47,8 @@ impl CliContext {
     /// same information goes into `result.data`).
     pub fn say(&self, line: &str) {
         if !self.json {
-            self.stdout.write_line(line);
+            // Lines often carry the model's text (summaries, logs): keep the terminal safe.
+            self.stdout.write_line(&text::clean(line));
         }
     }
 
