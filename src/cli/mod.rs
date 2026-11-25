@@ -1,13 +1,20 @@
 //! The `ork` command line. [`run`] is the whole CLI, callable in-process: `main` only forwards to
 //! it, so tests run commands with their own writers, directory and environment.
 
+pub mod context;
 pub mod exit;
 
+use std::any::Any;
+use std::future::Future;
+use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 
 use clap::error::ErrorKind;
 use clap::{CommandFactory, Parser};
+use futures::FutureExt;
 use tokio_util::sync::CancellationToken;
+
+pub use context::{CliContext, CommandResult};
 
 use crate::env::Env;
 use crate::io::{Captured, SharedWriter};
@@ -19,7 +26,11 @@ use crate::io::{Captured, SharedWriter};
     about = "orkestr8R: run coding orders on a local model, in git worktrees, checked with real commands.",
     arg_required_else_help = true
 )]
-pub struct Cli {}
+pub struct Cli {
+    /// Print events as JSON Lines on stdout; the last line is always `result`.
+    #[arg(long, global = true)]
+    pub json: bool,
+}
 
 /// The clap command tree (T15's sync test enumerates its subcommands).
 pub fn command() -> clap::Command {
@@ -54,24 +65,71 @@ impl CliIo {
 pub async fn run(
     args: Vec<String>,
     io: CliIo,
-    _cwd: PathBuf,
-    _env: Env,
-    _cancel: CancellationToken,
+    cwd: PathBuf,
+    env: Env,
+    cancel: CancellationToken,
 ) -> i32 {
-    match Cli::try_parse_from(&args) {
-        Ok(_cli) => exit::OK,
-        Err(err) => parse_error(&io, err),
+    let cli = match Cli::try_parse_from(&args) {
+        Ok(cli) => cli,
+        Err(err) => return parse_error(&io, err, args.iter().any(|a| a == "--json")),
+    };
+    let ctx = CliContext::new(io, cwd, env, cancel, cli.json);
+    // No commands yet (T03 adds the first): a parsed command line always ends here.
+    complete(&ctx, async { Ok(CommandResult::ok()) }).await
+}
+
+/// Runs one command handler and ends the command: exactly one `result` event, last, whatever the
+/// handler did. Returns the exit code.
+///
+/// - `Ok(result)` → that result.
+/// - `Err(e)` → status `error`, exit 1, the error's context chain as the message (and the full
+///   debug form on stderr with `ORK_DEBUG=1`).
+/// - a panic → status `error`, exit 1, `internal error: …`.
+pub async fn complete<F>(ctx: &CliContext, handler: F) -> i32
+where
+    F: Future<Output = anyhow::Result<CommandResult>>,
+{
+    // `catch_unwind` turns a panic inside the future into an `Err` instead of unwinding past us.
+    // `AssertUnwindSafe` is our promise that nothing is left half-updated that we read afterwards.
+    let result = match AssertUnwindSafe(handler).catch_unwind().await {
+        Ok(Ok(result)) => result,
+        Ok(Err(err)) => {
+            if ctx.env.get("ORK_DEBUG") == Some("1") {
+                ctx.note(&format!("{err:?}"));
+            }
+            CommandResult::error(format!("{err:#}"))
+        }
+        Err(panic) => CommandResult::error(format!("internal error: {}", panic_message(&*panic))),
+    };
+    let code = result.exit_code;
+    ctx.emit(result.into_event());
+    code
+}
+
+fn panic_message(panic: &(dyn Any + Send)) -> String {
+    if let Some(message) = panic.downcast_ref::<&str>() {
+        message.to_string()
+    } else if let Some(message) = panic.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "panic".to_string()
     }
 }
 
-/// clap reports `--help` and `--version` as "errors" too. Those print to stdout and exit 0; real
-/// parse errors print to stderr and exit 1 (clap's own default is 2; our contract says 1).
-fn parse_error(io: &CliIo, err: clap::Error) -> i32 {
+/// clap reports `--help` and `--version` as "errors" too. Those print to stdout and exit 0. Real
+/// parse errors exit 1 (clap's own default is 2; our contract says 1): with `--json` as one
+/// `result` line on stdout, otherwise clap's message on stderr.
+fn parse_error(io: &CliIo, err: clap::Error, json: bool) -> i32 {
     let text = err.render().to_string();
     match err.kind() {
         ErrorKind::DisplayHelp | ErrorKind::DisplayVersion => {
             io.stdout.write_str(&text);
             exit::OK
+        }
+        _ if json => {
+            let result = CommandResult::error(text.trim());
+            io.stdout.write_line(&result.into_event().to_line());
+            exit::ERROR
         }
         _ => {
             io.stderr.write_str(&text);

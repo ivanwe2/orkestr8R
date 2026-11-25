@@ -25,7 +25,7 @@ task at a time and finish it without asking.
 ## Progress
 
 - [x] T01 Scaffold the package
-- [ ] T02 JSON, events and CLI output
+- [x] T02 JSON, events and CLI output
 - [ ] T03 Config and `ork init`
 - [ ] T04 Model client and fake model server
 - [ ] T05 `ork doctor` and `ork models`
@@ -432,7 +432,9 @@ always last, whatever happens.
   - `events` (JsonLines to stdout when `--json`, else Human to stderr).
 - **Each command handler returns `anyhow::Result<CommandResult>`**, where
   `CommandResult { status, exit_code, job, report, data, error }` holds the `result` fields
-  (helpers: `CommandResult::ok(data)`, and so on).
+  (helpers: `CommandResult::ok()`, `ok_with(data)`, `error(message)`).
+  - Human output goes through `ctx.say(line)` (stdout, only without `--json`); notes for people
+    through `ctx.note(line)` (stderr, always); events through `ctx.emit(event)`.
   - The wrapper, `cli::complete(&ctx, handler_future) -> i32`, is `pub` so tests can drive it:
     - `Ok(result)` → that result;
     - `Err(e)` → status `error`, exit 1, `error` = `format!("{e:#}")` (the context chain on one
