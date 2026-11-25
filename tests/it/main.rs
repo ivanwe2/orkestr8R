@@ -3,6 +3,7 @@
 //! `cargo test --all-features --test it output::`.
 
 mod ask;
+mod checks;
 mod config;
 mod doctor;
 mod git;

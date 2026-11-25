@@ -35,7 +35,7 @@ task at a time and finish it without asking.
 - [x] T09 The grunt's tools
 - [x] T10 The grunt loop
 - [x] T11 Loop guards and context
-- [ ] T12 Checks, repair turns and the report
+- [x] T12 Checks, repair turns and the report
 - [ ] T13 `ork run`
 - [ ] T14 Job commands: `jobs`, `status`, `diff`, `logs`, `apply`, `discard`
 - [ ] T15 `ork guide`, the skill, the sync test, the README quickstart
@@ -1019,22 +1019,28 @@ before a stop.
 **Files:** `src/checks.rs`, `src/runs.rs`.
 
 **Details**
-- **`CheckRunner::run(&self, checks, root, cancel)`:**
+- **`CheckRunner::run(&self, checks, root, events, cancel) -> anyhow::Result<CheckRun>`:**
   - Each check goes through `CommandPolicy`, then `ProcessRunner` with `check_timeout_seconds`.
   - Run in order and **stop at the first failure**.
-  - Emit `check`. The result `tail` is the last 15 lines.
-- **`RunService::run(order, job, cancel)`** wires everything:
+  - Emit `check`. The result `tail` is the last 15 lines (at most 2,000 characters).
+  - A refused, missing or timed-out command is a failure with exit -1; only a cancel is an error.
+  - `CheckRun { results, failure: Option<CheckFailure { cmd, exit, output } > }`, where `output`
+    is the last 60 lines (cut with `head_tail`).
+- **`RunService { model, config, role, env, events }.run(order, job, store, cancel) -> anyhow::Result<Report>`**
+  wires everything (the job's worktree must exist; an error means it couldn't run at all):
   - **The `on_finish` verdict** (`RunService`'s `FinishHandler`):
     - checks pass → `Accept`;
     - fail with repairs left → emit `repair`, then
       `Reject("Checks failed. {cmd} exited {code}:\n{last 60 lines}\nFix the problem, then call finish again.")`;
-    - fail with no repairs left → `Accept`, remembering the failure.
+    - fail with no repairs left (`max_repairs` 0 included) → `Accept`, remembering the failure.
     - `readonly` orders with no checks are accepted at once.
   - **After the loop:**
-    - `commit_all(worktree, "ork({id}): {first line of goal}")` whatever the outcome, so failed work
-      can be inspected.
+    - `commit_all(worktree, "ork({id}): {first line of goal}")` (at most 72 characters) whatever
+      the outcome, so failed work can be inspected. A failed commit is a `commit_failed` warning,
+      not an error.
     - `num_stat` → `files_changed`.
-    - Build the `Report`, write `report.json`, set the status.
+    - Build the `Report` (`checks` = the last round's results; `reason` for `failed_checks` =
+      `"{cmd} exited {code}"`), write `report.json`, set the status.
 
   | Outcome | Status | Exit |
   |---|---|---|
