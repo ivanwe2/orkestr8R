@@ -36,7 +36,7 @@ task at a time and finish it without asking.
 - [x] T10 The grunt loop
 - [x] T11 Loop guards and context
 - [x] T12 Checks, repair turns and the report
-- [ ] T13 `ork run`
+- [x] T13 `ork run`
 - [ ] T14 Job commands: `jobs`, `status`, `diff`, `logs`, `apply`, `discard`
 - [ ] T15 `ork guide`, the skill, the sync test, the README quickstart
 - [ ] T16 Dogfood and release v0.1.0
@@ -425,7 +425,8 @@ always last, whatever happens.
   - `JsonLinesSink(writer)`: one line per event, flush after each.
   - `FileSink(path)`: appends a line (open in append mode, write, close).
   - `HumanSink(stderr)`: one short line per event; see the example below.
-  - `CompositeSink(Vec<Box<dyn EventSink>>)`.
+  - `CompositeSink(Vec<Arc<dyn EventSink>>)` (`Arc`, so the CLI's sink can be shared with a job's file
+    sink).
 - **`--json`** is a global flag on the root (`#[arg(long, global = true)]`).
 - **`CliContext`** carries:
   - `stdout`, `stderr`, `cwd`, `env`, `cancel`;
@@ -1070,22 +1071,28 @@ before a stop.
 
 **Details**
 - `ork run [ORDER.json] [--goal G] [--context C] [--path P]… [--scope GLOB]… [--check CMD]… [--readonly] [--max-turns N] [--max-repairs N] [--max-minutes N] [--json]`.
-  Flags override the file's fields.
-- **`orders::validate`** fails fast with exit 1 and every problem at once:
+  Flags override the file's fields (a repeated flag replaces the file's whole list). Paths are
+  relative to the repo root, like the order's.
+- **`orders::validate(order, root, policy)`** fails fast with exit 1 and every problem at once:
   - `goal` is required;
   - `checks` and `write_scope` are required unless `--readonly`;
+  - every `write_scope` glob is valid;
   - every path exists;
   - every check passes `CommandPolicy`.
+  - (A config that fails validation stops the run too, with its problems.)
 - **Flow:**
   1. repo root, config, model client;
-  2. warn `dirty_checkout` if the checkout has uncommitted changes (they are **not** in the
+  2. note `dirty_checkout` if the checkout has uncommitted changes (they are **not** in the
      worktree);
   3. `add_exclude`;
   4. `JobStore::create`;
   5. `worktree_add` from HEAD;
-  6. `start` event;
-  7. `RunService`;
-  8. `result` with `job` and `report`.
+  6. `start` event, **first** (the warnings from 1 and 2 come right after it);
+  7. `RunService`, with events going to the caller and to the job's `events.jsonl`
+     (`CompositeSink`);
+  8. `result` with `job` and `report` (also appended to `events.jsonl`). The status is the
+     report's; exit 0 / 4 / 1 as in T12. An `error` status carries the reason in `error`.
+  - An error after the job exists (the worktree can't be made, say) sets its status to `error`.
 - Without `--json`, progress goes to stderr and the report summary to stdout:
   ```
   passed · k7f2 · ork/k7f2
@@ -1094,6 +1101,8 @@ before a stop.
   ✓ dotnet test tests/Orders
   next: ork diff k7f2 · ork apply k7f2 · ork discard k7f2
   ```
+  Then `reason: …` and `? question` lines when there are any; a job that didn't pass gets
+  `next: ork diff … · ork logs … · ork discard …`.
 - Ctrl+C → status `error`, reason `cancelled`; the worktree is kept.
 
 **Tests** (`tests/it/run.rs`): end to end through `cli::run` with the fake server and a temp repo:
