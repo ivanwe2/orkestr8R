@@ -6,6 +6,7 @@ mod ask;
 mod config;
 mod doctor;
 mod git;
+mod grunt;
 mod model;
 mod output;
 // runs ork-testtool, which is only built with --features testtool

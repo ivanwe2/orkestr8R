@@ -39,11 +39,12 @@ pub async fn run(args: &Value, ctx: &ToolContext) -> ToolResult {
     if files.is_empty() {
         return ToolResult::ok(format!("{rel}: no files"));
     }
-    ToolResult::ok(render(&files, depth))
+    ToolResult::ok(render(&files, depth, MAX_ENTRIES))
 }
 
-/// A tree of `files` (paths with `/`), `depth` levels deep; deeper directories show a file count.
-pub fn render(files: &[String], depth: usize) -> String {
+/// A tree of `files` (paths with `/`), `depth` levels deep, at most `max_entries` lines; deeper
+/// directories show a file count.
+pub fn render(files: &[String], depth: usize, max_entries: usize) -> String {
     #[derive(Default)]
     struct Node {
         children: BTreeMap<String, Node>,
@@ -75,8 +76,8 @@ pub fn render(files: &[String], depth: usize) -> String {
 
     let mut lines = Vec::new();
     walk(&root, 0, depth, &mut lines);
-    let more = lines.len().saturating_sub(MAX_ENTRIES);
-    lines.truncate(MAX_ENTRIES);
+    let more = lines.len().saturating_sub(max_entries);
+    lines.truncate(max_entries);
     let mut out = lines.join("\n");
     if more > 0 {
         out += &format!("\n… {more} more");

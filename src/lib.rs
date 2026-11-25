@@ -8,6 +8,7 @@ pub mod config;
 pub mod env;
 pub mod events;
 pub mod git;
+pub mod grunt;
 pub mod io;
 pub mod jobs;
 pub mod model;
