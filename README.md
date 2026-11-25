@@ -35,9 +35,39 @@ The chief spends its tokens on judgment. Your GPUs do the volume.
 
 - **CLI first.** `ork` is one command-line tool with `--json` events and plain exit codes, so a
   person, a script or an AI agent can drive it. `ork guide` and an Agent Skill teach agents to use it.
-- **MCP.** `ork mcp` serves the same commands as tools, for clients that prefer them.
+- **MCP** (v0.2). `ork mcp` serves the same commands as tools, for clients that prefer them.
 - **Web UI** later (`ork serve`), built on the same commands: jobs live, the models' speed, the diffs,
   approve and apply.
+
+## Quickstart
+
+You need git, an OpenAI-compatible server for your local model (llama-server, llama-swap, Ollama,
+vLLM, LM Studio), and either Rust or a release binary.
+
+1. **Install.** From a clone of this repo: `cargo install --path . --locked`. Or put an `ork` binary
+   from the [releases](https://github.com/ivanwe2/orkestr8R/releases) on your PATH.
+2. **Point it at your model**, in the repo you want to work on:
+   ```
+   ork init --url http://gpu-box:9876/v1 --model qwen-27b
+   ```
+   That writes `ork.json` (the server, the grunt's model, and the build and test commands it may
+   run, detected from `Cargo.toml`, `go.mod`, `*.csproj` or `package.json`) and keeps `.ork/` out of
+   git. If the server needs an API key, use your own config instead:
+   `ork init --user --url … --model … --key-env LLAMA_API_KEY` (the key stays in that variable).
+3. **Check.** `ork doctor`: all ✓ means the server answers, the model calls tools, and the allowed
+   commands are on PATH.
+4. **Run an order.**
+   ```
+   ork run --goal "Add tests for parse_duration in src/time.rs" \
+     --path src/time.rs --scope "src/time.rs" --scope "tests/**" \
+     --check "cargo test --test time"
+   ```
+   Progress goes to stderr; the report to stdout, ending with
+   `next: ork diff k7f2 · ork apply k7f2 · ork discard k7f2`.
+5. **Land it.** `ork diff k7f2` to look, then `ork apply k7f2` (or `ork discard k7f2`).
+
+**For Claude Code:** `cp -r skills/orkestr8r ~/.claude/skills/`. It then knows when to delegate, and
+runs `ork guide` for the details (`--json`, long runs, reading the report).
 
 ## Docs
 

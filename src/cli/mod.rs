@@ -26,7 +26,8 @@ use crate::io::{Captured, SharedWriter};
     version,
     about = "orkestr8R: run coding orders on a local model, in git worktrees, checked with real commands.",
     arg_required_else_help = true,
-    subcommand_required = true
+    subcommand_required = true,
+    disable_help_subcommand = true
 )]
 pub struct Cli {
     /// Print events as JSON Lines on stdout; the last line is always `result`.
@@ -61,6 +62,8 @@ pub enum Commands {
     Apply(commands::jobs::ApplyArgs),
     /// Drop the worktree and the branch
     Discard(commands::jobs::JobArg),
+    /// The guide for AI agents: when to delegate, the order, reading the report
+    Guide,
 }
 
 /// The clap command tree (T15's sync test enumerates its subcommands).
@@ -117,6 +120,7 @@ pub async fn run(
         Commands::Logs(args) => complete(&ctx, commands::jobs::logs(&ctx, args)).await,
         Commands::Apply(args) => complete(&ctx, commands::jobs::apply(&ctx, args)).await,
         Commands::Discard(args) => complete(&ctx, commands::jobs::discard(&ctx, args)).await,
+        Commands::Guide => complete(&ctx, commands::guide::run(&ctx)).await,
     }
 }
 

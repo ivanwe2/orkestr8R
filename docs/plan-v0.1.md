@@ -38,7 +38,7 @@ task at a time and finish it without asking.
 - [x] T12 Checks, repair turns and the report
 - [x] T13 `ork run`
 - [x] T14 Job commands: `jobs`, `status`, `diff`, `logs`, `apply`, `discard`
-- [ ] T15 `ork guide`, the skill, the sync test, the README quickstart
+- [x] T15 `ork guide`, the skill, the sync test, the README quickstart
 - [ ] T16 Dogfood and release v0.1.0
 
 ```mermaid
@@ -1182,12 +1182,15 @@ before a stop.
   - **Long runs:** "a run can take 5–20 minutes. If your shell tool has a time limit, start
     `ork run --json` in the background, read the job id from the first line (`start`), and poll
     `ork status JOB --json`."
+  - Also: what each result status means and what to do about it, and the setup commands (`init`,
+    `doctor`, `models`, `ask`). With `--json`, the text is in `data.guide`.
 - **`SKILL.md`:**
   - Frontmatter: `name: orkestr8r`, and a `description` that says when to use it: "delegate
     mechanical, checkable coding work to the local model with the `ork` CLI".
   - Body: the delegation rules in short, then "run `ork guide` for the commands".
 - **The sync test:**
-  - Every subcommand of `cli::command()` appears as `ork <name>` in `guide.md` and in
+  - Every subcommand of `cli::command()` (clap's own `help` subcommand is turned off with
+    `disable_help_subcommand`; `ork --help` still works) appears as `ork <name>` in `guide.md` and in
     `docs/cli.md`.
   - `SKILL.md` mentions `ork guide`.
   - Find the files from `env!("CARGO_MANIFEST_DIR")`.
