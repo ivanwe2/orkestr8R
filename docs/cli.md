@@ -26,7 +26,9 @@ ork guide                                  the guide for AI agents (this file is
 ```
 
 In v0.1, `ork run` blocks until the job ends. An agent whose shell tool has a time limit starts it
-in the background, reads the job id from the first line, and polls `ork status JOB --json`.
+in the background, reads the job id from the first line, and polls `ork status JOB --json`. Its
+`result` has the job's status (`running` until the run ends) and, once it has ended, the same
+report and exit code `ork run` gave.
 
 ### Planned
 
@@ -75,7 +77,7 @@ line, and the last line is always `result`.
 | `check` | every check: command, exit code, seconds, last lines |
 | `repair` | a repair turn starts |
 | `warning` | e.g. a malformed tool call, a truncated output, a think block stripped |
-| `result` | always last: `status` (`ok`, `passed`, `failed_checks`, `gave_up`, `waiting`, `error`), `exit_code`; then, as needed, `job`, `report` (`run`, `status`), `data` (other commands' output) and `error` (the message, when the status is `error`) |
+| `result` | always last: `status` (`ok`, `passed`, `failed_checks`, `gave_up`, `error`; `ork status` also `running`, `applied`, `discarded`; `waiting` later), `exit_code`; then, as needed, `job`, `report` (`run`, `status`), `data` (other commands' output) and `error` (the message, when the status is `error`) |
 
 `call` events add up to the token ledger: what each job cost on which model.
 

@@ -37,7 +37,7 @@ task at a time and finish it without asking.
 - [x] T11 Loop guards and context
 - [x] T12 Checks, repair turns and the report
 - [x] T13 `ork run`
-- [ ] T14 Job commands: `jobs`, `status`, `diff`, `logs`, `apply`, `discard`
+- [x] T14 Job commands: `jobs`, `status`, `diff`, `logs`, `apply`, `discard`
 - [ ] T15 `ork guide`, the skill, the sync test, the README quickstart
 - [ ] T16 Dogfood and release v0.1.0
 
@@ -1120,21 +1120,30 @@ before a stop.
 **Files:** `src/cli/commands/jobs.rs`.
 
 **Details**
+- `JOB` is the id; `ork/<id>` works too.
 - **`ork jobs [--json]`:** a table with id, status, age, files changed and the goal (cut at 60
-  characters), newest first. `data` = the list of `JobState`.
+  characters), newest first. `data` = `{ "jobs": [JobState…] }`.
 - **`ork status JOB [--json]`:** the state, plus the report when there is one. While a job is
-  running, also the last event.
-- **`ork diff JOB [--stat]`:** `git diff base..ork/<id>`.
+  running, also the last event (the last line of `events.jsonl`). `data` = `{ state, last_event? }`.
+  **The result's status is the job's** (`running`, `passed`, …) with `ork run`'s exit codes
+  (`running` → 0), so polling a background run ends with exactly what the run returned.
+- **`ork diff JOB [--stat]`:** `git diff base..ork/<id>` on stdout (`data.diff` with `--json`).
+  An applied or discarded job has no branch left: an error.
 - **`ork logs JOB [--json]`:** the transcript, readable: `#3 assistant → edit_file {"path": …}` and
-  `#3 tool ← edited src/calc.rs (-1 +4)`. With `--json`, the raw lines.
+  `#3 tool ← edited src/calc.rs (-1 +4)`, plus `#3 meta stop · 100→20 tok · 4.1s`. With `--json`,
+  the raw lines in `data.lines` (stdout keeps the one-event-per-line contract).
 - **`ork apply JOB [--squash] [--force]`:**
   - The status must be `passed` (`--force` allows `failed_checks`/`gave_up`).
   - The checkout must be clean (ignoring `.ork/`), and you must not be on the job branch.
-  - Merge with `--no-ff -m "ork({id}): {goal}"`, or `--squash` plus a commit with that message.
-  - Then remove the worktree, delete the branch, and set the status to `applied`.
-  - A conflict aborts, changes nothing, and exits 1.
+  - Merge with `--no-ff -m "ork({id}): {goal's first line}"`, or `--squash` plus a commit with
+    that message.
+  - Then remove the worktree, delete the branch (`-D`: git doesn't see a squashed branch as
+    merged), and set the status to `applied`. `data` = `{ job, branch, commit, squash }`.
+  - A conflict aborts, changes nothing (the job stays `passed`, to apply later), and exits 1.
+  - Any other status (`running`, `error`, `applied`, `discarded`) can't be applied.
 - **`ork discard JOB`:** remove the worktree (force), delete the branch (`-D`), set the status to
-  `discarded`. Idempotent; the job directory stays for the logs.
+  `discarded`. Idempotent; the job directory stays for the logs. An applied job can't be
+  discarded.
 
 **Tests** (`tests/it/jobs.rs`): end to end:
 - `jobs` lists;
