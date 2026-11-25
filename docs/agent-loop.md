@@ -72,46 +72,44 @@ with the result, tied by `tool_call_id`, then sends everything again:
 **4. Repeat.** The model asks for `edit_file`, then `run("dotnet test")`, then `finish`. Every tool
 call in a reply needs its own `tool` message before the next request.
 
-## The loop in C# (a sketch)
+## The loop in Rust (a sketch)
 
-This shows the shape, not real code: `IModel`, `Message` and `Tools` are ours. M1 builds the real
-thing on `Microsoft.Extensions.AI`'s `IChatClient`.
+This shows the shape, not real code: `Message`, `Tools` and `Checks` are ours. The real loop
+(docs/plan-v0.1.md, T10–T12) talks to the server with raw `reqwest` + `serde_json`, so the JSON
+above is exactly what goes over the wire.
 
-```csharp
-public async Task<Report> RunAsync(Order order, CancellationToken ct)
-{
-    var messages = new List<Message> { Message.System(Prompts.Grunt), Message.User(order.ToPrompt()) };
-    var repairs = 0;
+```rust
+pub async fn run(&mut self, order: &Order) -> anyhow::Result<Report> {
+    let mut messages = vec![Message::system(prompts::GRUNT), Message::user(order.to_prompt())];
+    let mut repairs = 0;
 
-    for (var turn = 1; turn <= order.MaxTurns; turn++)
-    {
-        var reply = await _model.ChatAsync(messages, _tools.Schemas, ct);   // one HTTP request
-        messages.Add(reply);
+    for turn in 1..=order.max_turns {
+        let reply = self.model.chat(&messages, &self.tools.schemas()).await?;   // one HTTP request
+        messages.push(reply.to_message());
 
-        if (reply.ToolCalls.Count == 0)                   // it wrote text instead of acting
-        {
-            messages.Add(Message.User("Use a tool, or call finish with a summary."));
+        if reply.tool_calls.is_empty() {                     // it wrote text instead of acting
+            messages.push(Message::user("Use a tool, or call finish with a summary."));
             continue;
         }
 
-        foreach (var call in reply.ToolCalls)
-        {
-            if (call.Name != "finish")
-            {
-                var result = await _tools.RunAsync(call, order, ct);     // path guard, allow-list, timeout inside
-                messages.Add(Message.Tool(call.Id, Truncate(result)));
+        for call in &reply.tool_calls {
+            if call.name != "finish" {
+                let result = self.tools.run(call, order).await;          // path guard, allow-list, timeout inside
+                messages.push(Message::tool(&call.id, truncate(&result)));
                 continue;
             }
 
-            var checks = await _checks.RunAsync(order.Checks, ct);       // WE run them; exit codes decide
-            if (checks.AllPassed || repairs == order.MaxRepairs)
-                return Report.From(order, call, checks, repairs, turn);
+            let checks = self.checks.run(&order.checks).await?;         // WE run them; exit codes decide
+            if checks.all_passed() || repairs == order.max_repairs {
+                return Ok(Report::new(order, call, &checks, repairs, turn));
+            }
 
-            repairs++;
-            messages.Add(Message.Tool(call.Id, $"Checks failed:\n{checks.Tail()}\nFix it, then call finish again."));
+            repairs += 1;
+            messages.push(Message::tool(&call.id,
+                format!("Checks failed:\n{}\nFix it, then call finish again.", checks.tail())));
         }
     }
-    return Report.GaveUp(order, "max turns");
+    Ok(Report::gave_up(order, "max turns"))
 }
 ```
 
@@ -126,7 +124,7 @@ and more) splits a harness into seven parts. Where orkestr8R's grunt stands in i
 | Part | What it does | The grunt in iteration 1 |
 |---|---|---|
 | Agent loop | model ↔ tools, stop conditions, recovery | the loop above; limits on turns, tokens, minutes; gives up after repeated malformed calls |
-| LLM integration | the API, the prompt, reasoning settings | `IChatClient` on an OpenAI-compatible server; low temperature; `<think>` blocks stripped |
+| LLM integration | the API, the prompt, reasoning settings | raw HTTP to an OpenAI-compatible server; low temperature; `<think>` blocks stripped |
 | Tools and actions | what the model can do; file editing matters most | read, list, grep, write, edit (exact match), run, finish |
 | Memory and context | what fits in the window | capped reads, truncated outputs, old outputs stubbed |
 | Safety and permissions | what may run, isolation | worktree, path guard, `write_scope`, allow-listed commands, scrubbed env |

@@ -53,10 +53,12 @@ any of it; this space moves monthly.
 - Stateless core: no initialize handshake, no sessions.
 - Tasks moved into an extension: `tasks/get`, `tasks/update`, `tasks/cancel`.
 - Roots, Sampling and Logging are deprecated, so don't design around sampling.
-- MCP C# SDK 2.x implements it. The Claude Code CLI supports MCP Tasks (public beta from v2.1.304)
-  and moves MCP calls longer than two minutes to the background.
+- The Rust SDK (`rmcp` 3.x) and the C# SDK 2.x implement it, Tasks included. The Claude Code CLI
+  supports MCP Tasks (public beta from v2.1.304) and moves MCP calls longer than two minutes to the
+  background.
 - [spec blog](https://blog.modelcontextprotocol.io/posts/2026-07-28/) ·
   [changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog) ·
+  [Rust SDK](https://github.com/modelcontextprotocol/rust-sdk) ·
   [C# SDK](https://github.com/modelcontextprotocol/csharp-sdk) ·
   [Claude Code + Tasks](https://upstash.com/blog/claude-code-mcp-tasks)
 
