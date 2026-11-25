@@ -27,7 +27,7 @@ task at a time and finish it without asking.
 - [x] T01 Scaffold the package
 - [x] T02 JSON, events and CLI output
 - [x] T03 Config and `ork init`
-- [ ] T04 Model client and fake model server
+- [x] T04 Model client and fake model server
 - [ ] T05 `ork doctor` and `ork models`
 - [ ] T06 `ork ask`
 - [ ] T07 Processes and the command policy
@@ -555,12 +555,15 @@ server that every later test uses.
 - **Parse the response as a `serde_json::Value`, tolerantly** (missing fields become defaults, not
   errors):
   - `choices[0].message.content`, `.tool_calls[]` (`id`, `function.name`, `function.arguments`),
-    `.reasoning_content`;
+    `.reasoning_content` (or `.reasoning`, as vLLM and OpenRouter name it);
   - `choices[0].finish_reason`;
   - `usage.prompt_tokens` and `usage.completion_tokens`;
   - llama.cpp's `timings.predicted_per_second` when present, else completion tokens ÷ seconds.
-  - Keep `arguments` as the raw string; the tool layer validates it.
+  - Keep `arguments` as the raw string; the tool layer validates it. (When a server sends it as an
+    object, re-serialize it to a string.)
+  - A call without an `id` gets `call_N`: its result has to be tied to it.
   - Keep the whole body in `raw_json`.
+  - A reply with no `choices[0]` is an error (servers send `{"error": …}` with a 200 sometimes).
 - **`think::strip(&str) -> (String, bool)`:**
   - remove `<think>…</think>` blocks;
   - remove everything before an orphan `</think>`;
@@ -577,18 +580,28 @@ server that every later test uses.
   - Network errors, 429 and 5xx → retry twice, after 2 s and 5 s. The delays are a field
     (`retry_delays`) so tests set them to zero.
   - Other 4xx → an error with the status and the first 500 characters of the body.
-  - The request timeout comes from `request_timeout_seconds`.
-  - Every await also watches the cancel token.
+  - The request timeout comes from `request_timeout_seconds`. A timeout is **not** retried: the
+    model is just slow, and a retry would double a long wait.
+  - **Cancelling is by drop**, so `chat` takes no token: a Rust future only runs while polled, and
+    dropping it cancels it. Callers race it against the cancel token in `tokio::select!`; when the
+    token wins, the future is dropped and reqwest closes the connection.
+- **reqwest** with `default-features = false, features = ["rustls", "json"]` (rustls with aws-lc,
+  no OpenSSL; no http2 or system proxy settings needed).
 - **Fake server (`FakeModelServer`):**
   - axum on `tokio::net::TcpListener::bind("127.0.0.1:0")`; read the port from `local_addr()`;
     serve in a spawned task that is aborted on drop. `base_url()` = `http://127.0.0.1:{port}/v1`.
   - `POST /v1/chat/completions` → the next step of a `Script`; when the script runs out, 500
     `script exhausted`.
   - `GET /v1/models` → the ids it was started with.
-  - Every request body is recorded (`requests() -> Vec<Value>`).
+  - Every request is recorded: `requests() -> Vec<Value>` (the chat bodies), `recorded()` (path,
+    `Authorization` header, body).
   - Script builder: `Script::new().tool_call(name, json!({…}))`, `.tool_calls(vec![…])`,
     `.text(s)`, `.malformed_args(name, raw)`, `.raw(json_str)`, `.status(code)`. Every step uses
-    fixed usage numbers (100 in, 20 out).
+    fixed usage numbers (100 in, 20 out); call ids run `call_1`, `call_2`, … across the script.
+  - Helpers: `server.client()` (a `ModelClient` for `fake-model`, no retry delays),
+    `client_with_key(…)`, `server_config()`, and `unreachable_url()` (a port nothing listens on).
+  - The think-stripping and fallback cases are tests in `tests/it/model.rs` too, so the acceptance
+    filter runs them.
 
 **Tests** (`tests/it/model.rs`)
 - Tool calls are parsed.

@@ -3,6 +3,7 @@
 //! `cargo test --all-features --test it output::`.
 
 mod config;
+mod model;
 mod output;
 mod scaffold;
 mod support;

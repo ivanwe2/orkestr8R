@@ -9,4 +9,5 @@ pub mod env;
 pub mod events;
 pub mod git;
 pub mod io;
+pub mod model;
 pub mod orders;
