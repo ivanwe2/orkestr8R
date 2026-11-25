@@ -3,6 +3,7 @@
 
 pub mod ask;
 pub mod doctor;
+pub mod guide;
 pub mod init;
 pub mod jobs;
 pub mod models;

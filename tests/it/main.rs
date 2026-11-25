@@ -8,6 +8,7 @@ mod config;
 mod doctor;
 mod git;
 mod grunt;
+mod guide;
 mod jobs;
 mod model;
 mod output;
