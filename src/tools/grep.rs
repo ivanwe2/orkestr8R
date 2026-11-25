@@ -28,17 +28,18 @@ pub fn normalize_line(line: &str) -> String {
 /// The index just past the first `:<digits>:` in a `path:line:text` line, or `None` if the line
 /// has no line number.
 fn find_line_number(line: &str) -> Option<usize> {
-    let mut start = 0;
     for (i, b) in line.bytes().enumerate() {
         if b != b':' {
             continue;
         }
-        let next = line[start + 1..].find(':')?;
-        let num = &line[start + 1..start + 1 + next];
+        let next = match line[i + 1..].find(':') {
+            Some(next) => next,
+            None => continue,
+        };
+        let num = &line[i + 1..i + 1 + next];
         if !num.is_empty() && num.bytes().all(|b| b.is_ascii_digit()) {
-            return Some(start + 1 + next + 1);
+            return Some(i + 1 + next + 1);
         }
-        start = i + 1;
     }
     None
 }
