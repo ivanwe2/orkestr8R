@@ -284,6 +284,19 @@ async fn grep_without_matches_is_ok() {
 }
 
 #[tokio::test]
+async fn grep_takes_extended_regexes() {
+    let s = Setup::new(&[("src/calc.rs", "pub fn sum() {}\n")], &[]);
+
+    let escaped = s.call("grep", json!({ "pattern": "fn sum\\(\\)" })).await;
+    assert!(escaped.ok, "{}", escaped.output);
+    assert_eq!(escaped.output, "src/calc.rs:1:pub fn sum() {}");
+
+    let alternated = s.call("grep", json!({ "pattern": "nope|sum\\(" })).await;
+    assert!(alternated.ok, "{}", alternated.output);
+    assert_eq!(alternated.output, "src/calc.rs:1:pub fn sum() {}");
+}
+
+#[tokio::test]
 async fn grep_narrows_by_glob_and_path() {
     let s = Setup::new(
         &[

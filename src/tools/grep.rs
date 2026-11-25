@@ -141,7 +141,8 @@ fn rg_argv(pattern: &str, path: &str, glob: Option<&str>) -> Vec<String> {
 /// `git grep`'s pathspec does what `rg -g` does: a glob without `/` matches the file name at any
 /// depth (`**/` in front), within `path`.
 fn git_grep_argv(pattern: &str, path: &str, glob: Option<&str>) -> Vec<String> {
-    let mut argv: Vec<String> = ["git", "grep", "-n", "-I", "--untracked", "-e"]
+    // `-E`: extended regexes, like ripgrep; without it `\(` opens a group and `(` is literal.
+    let mut argv: Vec<String> = ["git", "grep", "-n", "-I", "-E", "--untracked", "-e"]
         .map(String::from)
         .to_vec();
     argv.extend([pattern.to_string(), "--".to_string()]);
