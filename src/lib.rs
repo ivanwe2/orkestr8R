@@ -3,6 +3,7 @@
 //!
 //! Everything lives in this library; the `ork` binary (`src/main.rs`) only calls [`cli::run`].
 
+pub mod checks;
 pub mod cli;
 pub mod config;
 pub mod env;
@@ -14,5 +15,6 @@ pub mod jobs;
 pub mod model;
 pub mod orders;
 pub mod process;
+pub mod runs;
 pub mod text;
 pub mod tools;
