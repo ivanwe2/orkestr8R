@@ -1,6 +1,7 @@
 //! The `ork` command line. [`run`] is the whole CLI, callable in-process: `main` only forwards to
 //! it, so tests run commands with their own writers, directory and environment.
 
+pub mod commands;
 pub mod context;
 pub mod exit;
 
@@ -10,7 +11,7 @@ use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 
 use clap::error::ErrorKind;
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, Parser, Subcommand};
 use futures::FutureExt;
 use tokio_util::sync::CancellationToken;
 
@@ -24,12 +25,22 @@ use crate::io::{Captured, SharedWriter};
     name = "ork",
     version,
     about = "orkestr8R: run coding orders on a local model, in git worktrees, checked with real commands.",
-    arg_required_else_help = true
+    arg_required_else_help = true,
+    subcommand_required = true
 )]
 pub struct Cli {
     /// Print events as JSON Lines on stdout; the last line is always `result`.
     #[arg(long, global = true)]
     pub json: bool,
+
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Commands {
+    /// Write ork.json (the repo's, or the user's with --user); add .ork/ to .git/info/exclude
+    Init(commands::init::InitArgs),
 }
 
 /// The clap command tree (T15's sync test enumerates its subcommands).
@@ -74,8 +85,9 @@ pub async fn run(
         Err(err) => return parse_error(&io, err, args.iter().any(|a| a == "--json")),
     };
     let ctx = CliContext::new(io, cwd, env, cancel, cli.json);
-    // No commands yet (T03 adds the first): a parsed command line always ends here.
-    complete(&ctx, async { Ok(CommandResult::ok()) }).await
+    match cli.command {
+        Commands::Init(args) => complete(&ctx, commands::init::run(&ctx, args)).await,
+    }
 }
 
 /// Runs one command handler and ends the command: exactly one `result` event, last, whatever the

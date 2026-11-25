@@ -2,6 +2,7 @@
 //! Each module is one area; acceptance commands filter by it:
 //! `cargo test --all-features --test it output::`.
 
+mod config;
 mod output;
 mod scaffold;
 mod support;
