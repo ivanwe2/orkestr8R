@@ -25,6 +25,11 @@ Don't delegate:
 One goal per order, an explicit scope, at least one check. Small orders pass far more often than big
 ones: split a feature into orders the way you'd split it into commits.
 
+The checks prove only what the tests test. Name the edge cases you care about in the order (and ask
+for tests of them), then still read the diff: a grunt's code can pass its own tests and be wrong.
+Say the repo's conventions too, e.g. "run `cargo fmt` before you call finish" when a check is
+`cargo fmt --check`.
+
 ## An order
 
 ```

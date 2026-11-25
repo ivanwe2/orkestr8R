@@ -250,6 +250,45 @@ async fn apply_merges_and_cleans_up() {
 }
 
 #[tokio::test]
+async fn apply_cuts_a_long_goal_in_the_merge_subject() {
+    let server = FakeModelServer::start(
+        Script::new()
+            .tool_call("edit_file", add_sum())
+            .tool_call("finish", json!({ "summary": "Added Sum" })),
+    )
+    .await;
+    let ws = Workspace::new(&server.base_url(), &["git grep"]);
+    ws.write("src/calc.rs", CALC);
+    ws.commit("initial");
+    let goal = format!("Add Sum to src/calc.rs {}", "and keep going ".repeat(10));
+    let args = [
+        "run", "--goal", &goal, "--scope", "src/**", "--check", CHECK, "--json",
+    ];
+    let out = run_cli(&args, &ws.repo, ws.env.clone()).await;
+    let job = json_lines(&out.stdout)[0]["job"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let (code, _, stderr) = ork(&ws, &["apply", &job]).await;
+
+    assert_eq!(code, exit::OK, "{stderr}");
+    let subject = git(&ws.repo, &["log", "-1", "--format=%s"]);
+    let subject = subject.trim();
+    let prefix = format!("ork({job}): ");
+    assert!(
+        subject.starts_with(&format!("{prefix}Add Sum")),
+        "{subject}"
+    );
+    assert!(subject.ends_with('…'), "{subject}");
+    assert_eq!(
+        subject.chars().count(),
+        prefix.chars().count() + 72,
+        "{subject}"
+    );
+}
+
+#[tokio::test]
 async fn apply_squash_makes_one_plain_commit() {
     let (ws, _server, job) = passing_job().await;
 

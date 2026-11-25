@@ -251,11 +251,9 @@ pub async fn apply(ctx: &CliContext, args: ApplyArgs) -> anyhow::Result<CommandR
         bail!("you're on the job's branch ({current}); switch to the branch to apply it to");
     }
 
-    let message = format!(
-        "ork({}): {}",
-        state.id,
-        state.goal.lines().next().unwrap_or_default().trim()
-    );
+    // Cut like the job's own commit message, so a long goal doesn't make a page-wide subject.
+    let goal = state.goal.lines().next().unwrap_or_default().trim();
+    let message = format!("ork({}): {}", state.id, text::ellipsize(goal, 72));
     git.merge(&root, &state.branch, args.squash, &message)
         .await?;
     let commit = git.head_sha(&root).await?;
