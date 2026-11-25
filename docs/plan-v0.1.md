@@ -725,7 +725,7 @@ finishes M0, without MCP (moved to v0.2).
     - `PATH`, `HOME`, `USER`, `LANG`, `LC_ALL`, `TMPDIR`, `TEMP`, `TMP`;
     - Windows: `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `PROGRAMDATA`, `SystemRoot`, `SystemDrive`,
       `windir`, `ComSpec`, `PATHEXT`, `NUMBER_OF_PROCESSORS`, `PROCESSOR_ARCHITECTURE`;
-    - toolchains: `CARGO_HOME`, `RUSTUP_HOME`, `RUSTUP_TOOLCHAIN`, `GOPATH`, `GOCACHE`,
+    - toolchains: `CARGO_HOME`, `CARGO_TARGET_DIR` (so jobs share a build cache), `RUSTUP_HOME`, `RUSTUP_TOOLCHAIN`, `GOPATH`, `GOCACHE`,
       `GOMODCACHE`, `NUGET_PACKAGES`, and everything starting with `DOTNET_`. (Not all `NUGET_*`
       or `CARGO_*`: those can carry tokens, e.g. `NUGET_AUTH_TOKEN`, `CARGO_REGISTRY_TOKEN`.)
     - Then set `CI=true`, `NO_COLOR=1`, `TERM=dumb`, `CARGO_TERM_COLOR=never`,

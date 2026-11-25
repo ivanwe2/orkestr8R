@@ -40,6 +40,8 @@ const PASS_NAMES: &[&str] = &[
     "PROCESSOR_ARCHITECTURE",
     // toolchains (named one by one: CARGO_* and NUGET_* can carry tokens)
     "CARGO_HOME",
+    // a shared build cache: jobs reuse one target dir instead of each building from scratch
+    "CARGO_TARGET_DIR",
     "RUSTUP_HOME",
     "RUSTUP_TOOLCHAIN",
     "GOPATH",
