@@ -1,0 +1,21 @@
+name: Idea or feature
+description: Something orkestr8R should do, or do differently
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you'd like it to work. A command line or an order is a good way to show it.
+  - type: textarea
+    id: else
+    attributes:
+      label: Anything else
+      description: Alternatives you've tried, links, related issues.

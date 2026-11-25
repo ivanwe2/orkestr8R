@@ -1,0 +1,37 @@
+name: Bug report
+description: ork did something wrong, or failed where it shouldn't
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: The command and its output
+      description: |
+        The `ork …` command line, and its output. With `--json`, the last lines (the `result`) help
+        most. For a job, `ork status JOB --json` and the relevant part of `ork logs JOB`.
+        Leave out keys, private code and anything else that shouldn't be public.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: ork --version
+      placeholder: ork 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: Windows 11, Ubuntu 24.04, macOS 15
+  - type: input
+    id: model
+    attributes:
+      label: Model server and model
+      description: e.g. llama-server with Qwen3-27B, Ollama with …, OpenRouter with …
