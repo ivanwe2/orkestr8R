@@ -10,6 +10,39 @@ pub const DESCRIPTION: &str = "Search file contents for a regular expression. Re
      up to 100 lines. Narrow it with path (a directory or file) and glob (e.g. *.rs).";
 const MAX_LINES: usize = 100;
 
+/// `path:line:text` with `/` in the path on every OS: a leading `./` or `.\` is stripped and
+/// backslashes become `/`, but only in the path part (everything before the first `:<digits>:`);
+/// the matched text after it is left alone, backslashes and all.
+pub fn normalize_line(line: &str) -> String {
+    let line = line
+        .strip_prefix("./")
+        .or_else(|| line.strip_prefix(".\\"))
+        .unwrap_or(line);
+    let (path, rest) = match find_line_number(line) {
+        Some(end) => line.split_at(end),
+        None => (line, ""),
+    };
+    format!("{}{}", path.replace('\\', "/"), rest)
+}
+
+/// The index just past the first `:<digits>:` in a `path:line:text` line, or `None` if the line
+/// has no line number.
+fn find_line_number(line: &str) -> Option<usize> {
+    let mut start = 0;
+    for (i, b) in line.bytes().enumerate() {
+        if b != b':' {
+            continue;
+        }
+        let next = line[start + 1..].find(':')?;
+        let num = &line[start + 1..start + 1 + next];
+        if !num.is_empty() && num.bytes().all(|b| b.is_ascii_digit()) {
+            return Some(start + 1 + next + 1);
+        }
+        start = i + 1;
+    }
+    None
+}
+
 pub fn parameters() -> Value {
     json!({
         "type": "object",
@@ -62,18 +95,12 @@ pub async fn run(args: &Value, ctx: &ToolContext) -> ToolResult {
     // Both tools: 0 = found, 1 = no match, anything else = an error (a bad regex, say).
     match result.exit_code {
         0 => {
-            let lines: Vec<&str> = result
+            let lines: Vec<String> = result
                 .output
                 .lines()
-                .map(|l| {
-                    l.strip_prefix("./")
-                        .or_else(|| l.strip_prefix(".\\"))
-                        .unwrap_or(l)
-                })
+                .map(normalize_line)
                 // belt and braces: nothing from inside .git, however it got matched
-                .filter(|l| {
-                    !l.starts_with(".git/") && !l.starts_with(".git\\") && !l.contains("/.git/")
-                })
+                .filter(|l| !l.starts_with(".git/") && !l.contains("/.git/"))
                 .collect();
             if lines.is_empty() {
                 return ToolResult::ok("no matches");
@@ -81,7 +108,7 @@ pub async fn run(args: &Value, ctx: &ToolContext) -> ToolResult {
             let mut out = lines
                 .iter()
                 .take(MAX_LINES)
-                .copied()
+                .cloned()
                 .collect::<Vec<_>>()
                 .join("\n");
             if lines.len() > MAX_LINES {
