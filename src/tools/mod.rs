@@ -223,17 +223,25 @@ impl ToolRegistry {
 
     /// Looks the tool up, checks the arguments, runs it. Every failure is a result for the model.
     pub async fn call(&self, name: &str, args_json: &str, ctx: &ToolContext) -> ToolResult {
+        match self.prepare(name, args_json) {
+            Ok((tool, args)) => tool.run(&args, ctx).await,
+            Err(problem) => ToolResult::error(problem),
+        }
+    }
+
+    /// The tool and its checked arguments, or why the call is malformed (an unknown tool, or
+    /// arguments that don't fit its schema). The loop's guards count malformed calls apart from
+    /// tools that ran and failed.
+    pub fn prepare(&self, name: &str, args_json: &str) -> Result<(Tool, Value), String> {
         let Some(tool) = self.get(name) else {
             let names: Vec<&str> = self.tools.iter().map(|tool| tool.name()).collect();
-            return ToolResult::error(format!(
+            return Err(format!(
                 "unknown tool `{name}`; the tools are: {}",
                 names.join(", ")
             ));
         };
-        match args::validate(args_json, &tool.schema().parameters) {
-            Ok(args) => tool.run(&args, ctx).await,
-            Err(problem) => ToolResult::error(problem),
-        }
+        let args = args::validate(args_json, &tool.schema().parameters)?;
+        Ok((tool, args))
     }
 }
 

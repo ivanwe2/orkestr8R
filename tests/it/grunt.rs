@@ -15,6 +15,8 @@ use crate::support::events::CollectSink;
 use crate::support::fake_server::{FakeModelServer, Script};
 use crate::support::temp_repo::TempRepo;
 
+mod guards;
+
 const CALC: &str = "pub fn one() -> i32 {\n    1\n}\n";
 
 fn order() -> Order {
@@ -48,6 +50,7 @@ struct Options {
     order: Order,
     cancel: CancellationToken,
     transcript: Transcript,
+    context_tokens: u32,
 }
 
 impl Default for Options {
@@ -56,6 +59,7 @@ impl Default for Options {
             order: order(),
             cancel: CancellationToken::new(),
             transcript: Transcript::discard(),
+            context_tokens: 32_768,
         }
     }
 }
@@ -82,7 +86,7 @@ async fn run_loop(script: Script, handler: &mut impl FinishHandler, options: Opt
         max_minutes: 5,
         temperature: 0.2,
         max_tokens: 512,
-        context_tokens: 32_768,
+        context_tokens: options.context_tokens,
     };
     let mut grunt = GruntLoop::new(
         &client,

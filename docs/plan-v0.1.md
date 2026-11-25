@@ -34,7 +34,7 @@ task at a time and finish it without asking.
 - [x] T08 Git, worktrees and the job store
 - [x] T09 The grunt's tools
 - [x] T10 The grunt loop
-- [ ] T11 Loop guards and context
+- [x] T11 Loop guards and context
 - [ ] T12 Checks, repair turns and the report
 - [ ] T13 `ork run`
 - [ ] T14 Job commands: `jobs`, `status`, `diff`, `logs`, `apply`, `discard`
@@ -981,11 +981,24 @@ registry; any for the individual tools
 | the same tool and arguments as the previous call (normalized JSON) | the result is prefixed `You already did this with the same arguments; the result is the same. Try something else.` | 5 in a row | `repeating` |
 | `finish_reason: length` | warning event `reply_cut`; appends a user message: `Your reply was cut off. Keep messages short; one tool call at a time.` | none | none |
 
+How the counters count (`grunt/guards.rs`, `LoopGuards`):
+- **Malformed** means an unknown tool, or arguments that don't fit the schema (a bad `finish`
+  too). Any well-formed call resets the count, even when the tool then fails ("not found" is the
+  tool working). `ToolRegistry::prepare(name, args)` tells the two apart.
+- **Repeating** counts repeats of the call just before (`finish` is never counted: calling it
+  again after a rejection is what it's for). The arguments are compared as parsed `Value`s, so key
+  order and spacing don't matter. The repeated call still runs, with the note in front of its
+  result; the 5th repeat in a row (the 6th identical call) gives up after its result.
+- **A cut-off reply** isn't counted as a text reply. With tool calls, the note comes after their
+  results.
+
 - **`ContextKeeper`:**
-  - After each reply, if `usage.prompt_tokens` > 75% of `context_tokens`, replace the oldest tool
-    messages' content with `[{tool} output removed to save context; call it again if you need it]`.
-  - Never stub the first user message or the last 4 tool messages.
-  - Stop when the estimate (total characters ÷ 3.5) is under 60%.
+  - Before each request, if the last reply's `usage.prompt_tokens` > 75% of `context_tokens`,
+    replace the oldest tool messages' content with
+    `[{tool} output removed to save context; call it again if you need it]`.
+  - Never stub the first user message or the last 4 tool messages, or one that's a stub already.
+  - Stop when the estimate (total characters ÷ 3.5, content plus tool-call arguments) is under
+    60%.
   - Emit a warning `context_stubbed` with the count.
 
 **Tests** (`tests/it/grunt.rs`):
