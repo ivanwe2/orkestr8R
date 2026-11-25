@@ -16,6 +16,7 @@ use crate::grunt::{
 use crate::jobs::{JobState, JobStore};
 use crate::model::ModelClient;
 use crate::orders::{JobStatus, Order, Report, TokenCount};
+use crate::text;
 use crate::tools::{ToolContext, ToolRegistry};
 
 pub struct RunService<'a> {
@@ -164,10 +165,5 @@ impl FinishHandler for Judge<'_> {
 /// The goal's first line, for the commit message (at most 72 characters).
 fn first_line(goal: &str) -> String {
     let line = goal.lines().next().unwrap_or_default().trim();
-    if line.chars().count() > 72 {
-        let cut: String = line.chars().take(71).collect();
-        format!("{cut}…")
-    } else {
-        line.to_string()
-    }
+    text::ellipsize(line, 72)
 }

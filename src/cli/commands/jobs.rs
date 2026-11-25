@@ -76,7 +76,7 @@ pub async fn jobs(ctx: &CliContext) -> anyhow::Result<CommandResult> {
             job.status.as_str(),
             age(job),
             files,
-            cut(job.goal.lines().next().unwrap_or_default(), 60)
+            text::ellipsize(job.goal.lines().next().unwrap_or_default(), 60)
         ));
     }
     Ok(CommandResult::ok_with(json!({ "jobs": jobs })))
@@ -190,7 +190,7 @@ fn readable(line: &Value) -> Vec<String> {
     let turn = line["turn"].as_u64().unwrap_or(0);
     let content = line["content"]
         .as_str()
-        .map(|c| cut(c.lines().next().unwrap_or_default(), 120));
+        .map(|c| text::ellipsize(c.lines().next().unwrap_or_default(), 120));
     match line["role"].as_str().unwrap_or_default() {
         "meta" => vec![format!(
             "#{turn} meta {} · {}→{} tok · {:.1}s",
@@ -212,7 +212,10 @@ fn readable(line: &Value) -> Vec<String> {
                     .and_then(short_args)
                     .map(|a| a.to_string())
                     .unwrap_or_default();
-                out.push(format!("#{turn} assistant → {name} {}", cut(&args, 120)));
+                out.push(format!(
+                    "#{turn} assistant → {name} {}",
+                    text::ellipsize(&args, 120)
+                ));
             }
             out
         }
@@ -308,14 +311,5 @@ fn age(job: &JobState) -> String {
         60..3600 => format!("{}m", seconds / 60),
         3600..86_400 => format!("{}h", seconds / 3600),
         _ => format!("{}d", seconds / 86_400),
-    }
-}
-
-fn cut(text: &str, max: usize) -> String {
-    if text.chars().count() > max {
-        let head: String = text.chars().take(max - 1).collect();
-        format!("{head}…")
-    } else {
-        text.to_string()
     }
 }

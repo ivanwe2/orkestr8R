@@ -40,3 +40,14 @@ pub fn cut(text: &str, max: usize) -> (&str, bool) {
         None => (text, false),
     }
 }
+
+/// `text` shortened to at most `max` chars: unchanged when it fits, otherwise its first
+/// `max - 1` chars followed by `…`. Counts chars, not bytes.
+pub fn ellipsize(text: &str, max: usize) -> String {
+    if text.chars().count() > max {
+        let head: String = text.chars().take(max - 1).collect();
+        format!("{head}…")
+    } else {
+        text.to_string()
+    }
+}
