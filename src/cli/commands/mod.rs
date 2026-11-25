@@ -5,6 +5,7 @@ pub mod ask;
 pub mod doctor;
 pub mod init;
 pub mod models;
+pub mod run;
 
 use crate::cli::CliContext;
 use crate::config::{self, LoadedConfig};

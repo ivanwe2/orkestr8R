@@ -47,6 +47,8 @@ pub enum Commands {
     Models(commands::models::ModelsArgs),
     /// A one-shot, read-only answer about files from the local model
     Ask(commands::ask::AskArgs),
+    /// Run one order: worktree, grunt loop, checks, report (flags override the file)
+    Run(commands::run::RunArgs),
 }
 
 /// The clap command tree (T15's sync test enumerates its subcommands).
@@ -96,6 +98,7 @@ pub async fn run(
         Commands::Doctor => complete(&ctx, commands::doctor::run(&ctx)).await,
         Commands::Models(args) => complete(&ctx, commands::models::run(&ctx, args)).await,
         Commands::Ask(args) => complete(&ctx, commands::ask::run(&ctx, args)).await,
+        Commands::Run(args) => complete(&ctx, commands::run::run(&ctx, args)).await,
     }
 }
 

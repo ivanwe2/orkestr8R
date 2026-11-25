@@ -5,7 +5,7 @@
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -152,7 +152,7 @@ impl EventSink for FileSink {
 }
 
 /// Sends every event to each of its sinks, in order.
-pub struct CompositeSink(pub Vec<Box<dyn EventSink>>);
+pub struct CompositeSink(pub Vec<Arc<dyn EventSink>>);
 
 impl EventSink for CompositeSink {
     fn emit(&self, event: &OrkEvent) {

@@ -1,6 +1,10 @@
 //! Orders (what the chief asks for) and reports (what comes back). Contracts: docs/cli.md.
 
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
+
+use crate::process::CommandPolicy;
 
 /// `write` (the default) gets every tool; `readonly` gets only the reading ones, for
 /// investigations whose answer comes back in the summary.
@@ -47,6 +51,62 @@ pub enum JobStatus {
     Error,
     Applied,
     Discarded,
+}
+
+impl JobStatus {
+    /// The name on the wire: `passed`, `failed_checks`, …
+    pub fn as_str(self) -> &'static str {
+        match self {
+            JobStatus::Running => "running",
+            JobStatus::Passed => "passed",
+            JobStatus::FailedChecks => "failed_checks",
+            JobStatus::GaveUp => "gave_up",
+            JobStatus::Error => "error",
+            JobStatus::Applied => "applied",
+            JobStatus::Discarded => "discarded",
+        }
+    }
+}
+
+/// Every problem with `order`, at once (the chief fixes them all in one go). `root` is the repo
+/// root its paths are relative to; `policy` is the command allow-list its checks must pass.
+pub fn validate(order: &Order, root: &Path, policy: &CommandPolicy) -> Vec<String> {
+    let mut problems = Vec::new();
+    if order.goal.trim().is_empty() {
+        problems.push("goal: required".to_string());
+    }
+    if order.mode == OrderMode::Write {
+        if order.checks.is_empty() {
+            problems.push(
+                "checks: at least one is required (or use --readonly for an investigation)"
+                    .to_string(),
+            );
+        }
+        if order.write_scope.is_empty() {
+            problems.push(
+                "write_scope: required: the files the grunt may change (--scope 'src/**')"
+                    .to_string(),
+            );
+        }
+    }
+    for pattern in &order.write_scope {
+        if globset::Glob::new(pattern).is_err() {
+            problems.push(format!("write_scope: {pattern} is not a valid glob"));
+        }
+    }
+    for path in &order.paths {
+        if !root.join(path).is_file() {
+            problems.push(format!(
+                "paths: {path} not found (paths are relative to the repo root)"
+            ));
+        }
+    }
+    for check in &order.checks {
+        if let Err(refused) = policy.check(check) {
+            problems.push(format!("checks: {check}: {refused}"));
+        }
+    }
+    problems
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
