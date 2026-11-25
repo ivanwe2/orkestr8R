@@ -233,6 +233,7 @@ fn only_allowed_variables_are_passed() {
         Env::default()
             .with("PATH", "/bin")
             .with("DOTNET_ROOT", "/dotnet")
+            .with("CARGO_TARGET_DIR", "/cache/target")
             .with("CARGO_REGISTRY_TOKEN", "secret")
             .with("NUGET_AUTH_TOKEN", "secret")
             .with("OPENAI_API_KEY", "secret"),
@@ -244,7 +245,9 @@ fn only_allowed_variables_are_passed() {
         .map(|(name, _)| name)
         .collect();
 
-    assert!(names.contains(&"PATH".to_string()) && names.contains(&"DOTNET_ROOT".to_string()));
+    for passed in ["PATH", "DOTNET_ROOT", "CARGO_TARGET_DIR"] {
+        assert!(names.contains(&passed.to_string()), "{passed} not passed");
+    }
     for secret in ["CARGO_REGISTRY_TOKEN", "NUGET_AUTH_TOKEN", "OPENAI_API_KEY"] {
         assert!(!names.contains(&secret.to_string()), "{secret} leaked");
     }
