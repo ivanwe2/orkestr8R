@@ -20,12 +20,15 @@ pub use wire::{
     ChatRequest, ModelReply, ToolCall, ToolSchema, WireFunctionCall, WireMessage, WireToolCall,
 };
 
-use crate::config::{RoleConfig, ServerConfig};
+use crate::config::{self, OrkConfig, RoleConfig, ServerConfig};
+use crate::env::Env;
 
 pub struct ModelClient {
     http: reqwest::Client,
     /// The server's base URL, without a trailing `/` (it already ends in `/v1`).
     base_url: String,
+    /// The server's name in the config (`box`), for `call` events. Empty when built with `new`.
+    server_name: String,
     model: String,
     api_key: Option<String>,
     /// How long to wait before each retry; one retry per entry. Tests set these to zero.
@@ -33,6 +36,29 @@ pub struct ModelClient {
 }
 
 impl ModelClient {
+    /// The client for a role in the config (`grunt`): its server, its model, the key from the
+    /// environment, the config's request timeout. Also returns the role's settings.
+    pub fn for_role<'c>(
+        config: &'c OrkConfig,
+        role: &str,
+        env: &Env,
+    ) -> anyhow::Result<(Self, &'c RoleConfig)> {
+        let role_config = config
+            .roles
+            .get(role)
+            .with_context(|| format!("roles.{role} is missing from the config (run ork init)"))?;
+        let server = config.servers.get(&role_config.server).with_context(|| {
+            format!(
+                "roles.{role}.server: \"{}\" is not in servers",
+                role_config.server
+            )
+        })?;
+        let timeout = Duration::from_secs(config.defaults.request_timeout_seconds);
+        let mut client = Self::new(server, role_config, config::api_key(server, env), timeout)?;
+        client.server_name = role_config.server.clone();
+        Ok((client, role_config))
+    }
+
     pub fn new(
         server: &ServerConfig,
         role: &RoleConfig,
@@ -46,6 +72,7 @@ impl ModelClient {
         Ok(Self {
             http,
             base_url: server.url.trim_end_matches('/').to_string(),
+            server_name: String::new(),
             model: role.model.clone(),
             api_key,
             retry_delays: vec![Duration::from_secs(2), Duration::from_secs(5)],
@@ -58,6 +85,15 @@ impl ModelClient {
 
     pub fn base_url(&self) -> &str {
         &self.base_url
+    }
+
+    pub fn server_name(&self) -> &str {
+        &self.server_name
+    }
+
+    /// Whether an API key will be sent.
+    pub fn has_key(&self) -> bool {
+        self.api_key.is_some()
     }
 
     /// One chat completion: the whole conversation in, one reply out.
