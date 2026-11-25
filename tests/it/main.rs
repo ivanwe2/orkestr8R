@@ -18,4 +18,5 @@ mod processes;
 mod run;
 mod scaffold;
 mod support;
+mod text;
 mod tools;
