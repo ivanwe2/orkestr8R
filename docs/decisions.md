@@ -2,6 +2,16 @@
 
 Newest first. Each line: what was decided, and why. Open questions at the bottom.
 
+## 2026-11-26
+
+- **The web UI shows token and model stats for every model, local or cloud** (Ivan; #31): per
+  job and per model, tokens in and out, seconds, tokens per second, and the server it ran on. It
+  takes its cues from localdub's control-room UI but follows orkestr8R's own theme
+  (docs/brand.md), not localdub's look. The `call` events already carry the numbers.
+- **Repo settings:** squash-only merges with the PR body as the message, branches deleted on merge,
+  Dependabot (cargo, GitHub Actions), secret scanning with push protection, private vulnerability
+  reporting. Releases come from `v*` tags (`.github/workflows/release.yml`).
+
 ## 2026-11-24
 
 - **Stack: Rust, not .NET/C#** (replaces the 2026-11-23 decision). Ivan: C# is too boring for

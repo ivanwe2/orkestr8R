@@ -284,6 +284,19 @@ async fn grep_without_matches_is_ok() {
 }
 
 #[tokio::test]
+async fn grep_takes_extended_regexes() {
+    let s = Setup::new(&[("src/calc.rs", "pub fn sum() {}\n")], &[]);
+
+    let escaped = s.call("grep", json!({ "pattern": "fn sum\\(\\)" })).await;
+    assert!(escaped.ok, "{}", escaped.output);
+    assert_eq!(escaped.output, "src/calc.rs:1:pub fn sum() {}");
+
+    let alternated = s.call("grep", json!({ "pattern": "nope|sum\\(" })).await;
+    assert!(alternated.ok, "{}", alternated.output);
+    assert_eq!(alternated.output, "src/calc.rs:1:pub fn sum() {}");
+}
+
+#[tokio::test]
 async fn grep_narrows_by_glob_and_path() {
     let s = Setup::new(
         &[
@@ -697,4 +710,52 @@ async fn windows_names_that_alias_other_files_are_refused() {
             .await;
         assert!(!result.ok, "{path}: {}", result.output);
     }
+}
+
+#[test]
+fn normalize_line_rewrites_windows_paths_to_slashes() {
+    assert_eq!(
+        orkestr8r::tools::grep::normalize_line("src\\calc.rs:12:fn sum() {}"),
+        "src/calc.rs:12:fn sum() {}"
+    );
+}
+
+#[test]
+fn normalize_line_leaves_backslashes_in_the_matched_text() {
+    assert_eq!(
+        orkestr8r::tools::grep::normalize_line(r#"src\calc.rs:12:let p = r"C:\temp\";"#),
+        r#"src/calc.rs:12:let p = r"C:\temp\";"#
+    );
+}
+
+#[test]
+fn normalize_line_keeps_lines_that_already_use_slashes() {
+    assert_eq!(
+        orkestr8r::tools::grep::normalize_line("src/calc.rs:12:fn sum() {}"),
+        "src/calc.rs:12:fn sum() {}"
+    );
+}
+
+#[test]
+fn normalize_line_strips_a_leading_dot_backslash() {
+    assert_eq!(
+        orkestr8r::tools::grep::normalize_line(r".\src\calc.rs:12:fn sum() {}"),
+        "src/calc.rs:12:fn sum() {}"
+    );
+}
+
+#[test]
+fn normalize_line_handles_one_digit_line_numbers() {
+    assert_eq!(
+        orkestr8r::tools::grep::normalize_line(r"a\b.rs:5:x\y"),
+        "a/b.rs:5:x\\y"
+    );
+}
+
+#[test]
+fn normalize_line_ignores_colons_and_digits_in_the_matched_text() {
+    assert_eq!(
+        orkestr8r::tools::grep::normalize_line(r#"src\a.rs:7:let t = "10:30";"#),
+        r#"src/a.rs:7:let t = "10:30";"#
+    );
 }
