@@ -342,3 +342,41 @@ fn state_survives_a_crash_mid_write() {
         .unwrap();
     assert_eq!(store.load(&job.id).unwrap().status, JobStatus::Error);
 }
+
+#[test]
+fn job_ids_from_the_command_line_cannot_leave_the_jobs_directory() {
+    let repo = TempRepo::new();
+    let store = JobStore::new(&repo.path);
+    repo.write("secret/state.json", "{}");
+
+    for id in ["../../secret", "..", "a/b", "AB12", ""] {
+        let err = store.load(id).unwrap_err().to_string();
+        assert!(err.contains("is not a job id"), "{id:?}: {err}");
+    }
+}
+
+#[test]
+fn a_state_file_that_describes_another_job_is_refused() {
+    let repo = TempRepo::new();
+    let store = JobStore::new(&repo.path);
+    let job = store.create(&order(), "abc1234").unwrap();
+    let path = store.paths(&job.id).state;
+    let original = std::fs::read_to_string(&path).unwrap();
+
+    // a branch that git would take as an option, a sha that isn't one, another job's id
+    for (from, to) in [
+        (
+            format!("\"ork/{}\"", job.id),
+            "\"--upload-pack=touch /tmp/x\"".to_string(),
+        ),
+        ("\"abc1234\"".to_string(), "\"--output=/tmp/x\"".to_string()),
+        (
+            format!("\"id\": \"{}\"", job.id),
+            "\"id\": \"zzzz\"".to_string(),
+        ),
+    ] {
+        std::fs::write(&path, original.replace(&from, &to)).unwrap();
+        let err = store.load(&job.id).unwrap_err().to_string();
+        assert!(err.contains("is damaged"), "{to}: {err}");
+    }
+}

@@ -14,6 +14,7 @@ use crate::grunt::short_args;
 use crate::jobs::{JobState, JobStore};
 use crate::orders::JobStatus;
 use crate::process::ProcessRunner;
+use crate::text;
 
 #[derive(Debug, Args)]
 pub struct JobArg {
@@ -158,7 +159,7 @@ pub async fn diff(ctx: &CliContext, args: DiffArgs) -> anyhow::Result<CommandRes
         .diff(&root, &state.base_sha, &state.branch, args.stat)
         .await?;
     if !ctx.json {
-        ctx.stdout.write_str(&diff);
+        ctx.stdout.write_str(&text::clean(&diff));
     }
     Ok(CommandResult::ok_with(json!({ "diff": diff })))
 }

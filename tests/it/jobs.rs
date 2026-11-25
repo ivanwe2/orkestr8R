@@ -183,6 +183,33 @@ async fn logs_read_like_a_conversation() {
 }
 
 #[tokio::test]
+async fn the_models_text_cannot_drive_the_terminal() {
+    let script = Script::new().tool_call("edit_file", add_sum()).tool_call(
+        "finish",
+        json!({ "summary": "Added Sum\u{1b}]0;pwned\u{7}\u{1b}[2J" }),
+    );
+    let (ws, _server, job) = one_job(script, &[]).await;
+
+    let status = run_cli(&["status", &job], &ws.repo, ws.env.clone())
+        .await
+        .stdout;
+    let logs = run_cli(&["logs", &job], &ws.repo, ws.env.clone())
+        .await
+        .stdout;
+
+    for out in [&status, &logs] {
+        assert!(!out.contains('\u{1b}') && !out.contains('\u{7}'), "{out:?}");
+    }
+    // the summary line: escaped so it shows; in the logs it's inside the call's JSON arguments,
+    // which serde escaped already
+    assert!(
+        status.contains(r"Added Sum\u{1b}]0;pwned\u{7}\u{1b}[2J"),
+        "{status:?}"
+    );
+    assert!(logs.contains(r"Added Sum\u001b]0;pwned\u0007"), "{logs:?}");
+}
+
+#[tokio::test]
 async fn apply_merges_and_cleans_up() {
     let (ws, _server, job) = passing_job().await;
 

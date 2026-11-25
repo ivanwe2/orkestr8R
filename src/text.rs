@@ -14,6 +14,25 @@ pub fn numbered(text: &str, first: usize, max_lines: usize) -> (String, bool) {
     (out, lines.next().is_some())
 }
 
+/// `text` made safe for a terminal: control characters (ESC, a lone CR, DEL, the C1 range with
+/// its CSI, …) are escaped, so text from the model can't drive the terminal (move the cursor,
+/// rewrite a line, change colours). Newlines, tabs and `\r\n` stay, so CRLF text reads normally.
+/// JSON output needs no such step: serde_json escapes control characters itself.
+pub fn clean(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        let keep =
+            !c.is_control() || c == '\n' || c == '\t' || (c == '\r' && chars.peek() == Some(&'\n'));
+        if keep {
+            out.push(c);
+        } else {
+            out.extend(c.escape_default());
+        }
+    }
+    out
+}
+
 /// `text` cut to at most `max` chars (on a char boundary), and whether it was cut.
 pub fn cut(text: &str, max: usize) -> (&str, bool) {
     match text.char_indices().nth(max) {

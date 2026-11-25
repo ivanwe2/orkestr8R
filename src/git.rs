@@ -170,7 +170,16 @@ impl Git {
     ) -> anyhow::Result<Vec<FileChange>> {
         let range = format!("{base_sha}..{branch}");
         let out = self
-            .run(root, &["diff", "--numstat", "--no-renames", &range])
+            .run(
+                root,
+                &[
+                    "diff",
+                    "--numstat",
+                    "--no-renames",
+                    "--end-of-options",
+                    &range,
+                ],
+            )
             .await?;
         Ok(out
             .lines()
@@ -201,6 +210,8 @@ impl Git {
         if stat {
             args.push("--stat");
         }
+        // Revisions after --end-of-options: nothing that looks like an option is taken as one.
+        args.push("--end-of-options");
         args.push(&range);
         self.run(root, &args).await
     }
@@ -215,7 +226,9 @@ impl Git {
         message: &str,
     ) -> anyhow::Result<()> {
         if squash {
-            let merged = self.output(root, &["merge", "--squash", branch]).await?;
+            let merged = self
+                .output(root, &["merge", "--squash", "--end-of-options", branch])
+                .await?;
             if !merged.status.success() {
                 // A squash merge leaves no MERGE_HEAD, so `merge --abort` can't undo it.
                 let _ = self.run(root, &["reset", "--merge"]).await;
@@ -229,7 +242,15 @@ impl Git {
             let merged = self
                 .output(
                     root,
-                    &["merge", "--no-ff", "--no-edit", "-m", message, branch],
+                    &[
+                        "merge",
+                        "--no-ff",
+                        "--no-edit",
+                        "-m",
+                        message,
+                        "--end-of-options",
+                        branch,
+                    ],
                 )
                 .await?;
             if !merged.status.success() {
@@ -258,8 +279,16 @@ impl Git {
         branch: &str,
         force: bool,
     ) -> anyhow::Result<()> {
-        self.run(root, &["branch", if force { "-D" } else { "-d" }, branch])
-            .await?;
+        self.run(
+            root,
+            &[
+                "branch",
+                if force { "-D" } else { "-d" },
+                "--end-of-options",
+                branch,
+            ],
+        )
+        .await?;
         Ok(())
     }
 

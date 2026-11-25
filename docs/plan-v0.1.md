@@ -437,6 +437,9 @@ always last, whatever happens.
   (helpers: `CommandResult::ok()`, `ok_with(data)`, `error(message)`).
   - Human output goes through `ctx.say(line)` (stdout, only without `--json`); notes for people
     through `ctx.note(line)` (stderr, always); events through `ctx.emit(event)`.
+  - **Everything shown to people is cleaned** (`text::clean`): control characters (ESC, a lone CR,
+    DEL, C1) are escaped, so model-written text (summaries, logs, diffs) can't drive the
+    terminal. `ctx.say` and `HumanSink` do it; JSON needs nothing (serde escapes them).
   - The wrapper, `cli::complete(&ctx, handler_future) -> i32`, is `pub` so tests can drive it:
     - `Ok(result)` → that result;
     - `Err(e)` → status `error`, exit 1, `error` = `format!("{e:#}")` (the context chain on one
@@ -782,6 +785,11 @@ finishes M0, without MCP (moved to v0.2).
     the `JobState` (`branch` = `ork/<id>`, `worktree` = `.ork/worktrees/<id>`, relative, with `/`).
   - `load(id)`, `load_order(id)`, `list()` (newest first), `set_status(id, status, reason)`,
     `write_report`, `load_report`.
+  - **`load` checks before it trusts:** the id must be 1–32 lower-case letters and digits
+    (`is_job_id`: no `../`), and the file must describe that job: `id`, `branch` = `ork/<id>`,
+    `worktree` = `.ork/worktrees/<id>`, a hex `base_sha`. A cloned repo could carry its own `.ork/`;
+    nothing from it reaches a path or a git argument unchecked. (Git calls also put revisions after
+    `--end-of-options`.)
   - `paths(id)` → the job's files (`events`, `transcript`, …); `worktree_path(id)` → the full path.
 - **`TempRepo`** (tests): a temp dir with `git init`, `core.autocrlf false`, an identity, and helpers
   to write files and commit. The end-to-end `Workspace` is a `TempRepo` plus a config.
