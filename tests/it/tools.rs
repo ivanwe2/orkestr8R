@@ -730,3 +730,19 @@ fn normalize_line_strips_a_leading_dot_backslash() {
         "src/calc.rs:12:fn sum() {}"
     );
 }
+
+#[test]
+fn normalize_line_handles_one_digit_line_numbers() {
+    assert_eq!(
+        orkestr8r::tools::grep::normalize_line(r"a\b.rs:5:x\y"),
+        "a/b.rs:5:x\\y"
+    );
+}
+
+#[test]
+fn normalize_line_ignores_colons_and_digits_in_the_matched_text() {
+    assert_eq!(
+        orkestr8r::tools::grep::normalize_line(r#"src\a.rs:7:let t = "10:30";"#),
+        r#"src/a.rs:7:let t = "10:30";"#
+    );
+}
