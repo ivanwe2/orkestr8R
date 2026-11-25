@@ -1,0 +1,3 @@
+/target
+# orkestr8R jobs and worktrees (also added to .git/info/exclude by ork init)
+.ork/
