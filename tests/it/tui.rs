@@ -1,9 +1,12 @@
+use std::path::PathBuf;
+
 use chrono::{DateTime, Duration, Utc};
 use orkestr8r::config::{self, OrkConfig};
 use orkestr8r::env::Env;
 use orkestr8r::events::OrkEvent;
 use orkestr8r::jobs::JobStore;
 use orkestr8r::orders::{FileChange, JobStatus, Order, Report, TokenCount};
+use orkestr8r::skill::{Agent, Installed, Target};
 use orkestr8r::tui::Ork;
 use orkestr8r::tui::app::{Action, App, Outcome, PagerKind, Screen, Setup, Tone};
 use orkestr8r::tui::theme::ThemeName;
@@ -218,11 +221,11 @@ fn the_screen_shows_the_jobs_the_models_and_the_running_job() {
     let s = screen(&app, 150, 40);
     for text in [
         "orkestr8R",
-        "WORKING · 1",
-        "YOUR TURN · 2",
+        "1 WORKING",
+        "2 YOUR TURN",
         "grunt qwen-27b @ box · local · 65.5k ctx",
-        "JOBS · 3",
-        "failed checks",
+        "JOBS  3",
+        "FAILED ",
         "2 files",
         // the speed readout, live from the running job: 47 in block digits, then the unit
         "█ █ ▀▀█",
@@ -235,7 +238,7 @@ fn the_screen_shows_the_jobs_the_models_and_the_running_job() {
         "$0.0021",
         "all",
         // the running job
-        "RUNNING · TURN 2/30 · REPAIRS 0/2",
+        "RUNNING  TURN 2/30 · REPAIRS 0/2",
         "00:03:42",
         "TRACK",
         "CONTEXT",
@@ -256,7 +259,7 @@ fn a_finished_job_shows_its_track_summary_and_reason() {
 
     let s = screen(&app, 150, 40);
     for text in [
-        "FAILED CHECKS · TURN 1/30",
+        "FAILED CHECKS  TURN 1/30",
         "▮✗", // a turn whose tool failed, then a failed check
         "REASON",
         "checks failed",
@@ -431,7 +434,7 @@ fn a_diff_opens_in_the_pager_and_errors_go_to_the_footer() {
     assert_eq!((pager.kind, pager.lines.len()), (PagerKind::Diff, 4));
     let s = screen(&app, 100, 20);
     for text in [
-        &format!("DIFF · {}", jobs.passed),
+        &format!("DIFF  {}", jobs.passed),
         "+new",
         "-old",
         "1–4 of 4",
@@ -472,8 +475,9 @@ fn an_empty_repo_gets_a_welcome() {
     let s = screen(&app, 120, 30);
     for text in [
         "IDLE",
-        "No jobs yet",
         "frontier plans · local executes",
+        "/skill",
+        "Start your agent in another terminal",
         "no grunt set up: ork init",
     ] {
         assert!(s.contains(text), "{text:?} not on the screen:\n{s}");
@@ -579,4 +583,331 @@ async fn a_real_job_shows_up_and_applies_through_the_runner() {
 
     assert_eq!(missing.code, 1);
     assert!(missing.stderr.contains("error:"), "{missing:?}");
+}
+
+fn typed(app: &mut App, text: &str) {
+    for c in text.chars() {
+        app.on_key(key(KeyCode::Char(c)));
+    }
+}
+
+fn targets(installed: &[Agent], found: &[Agent]) -> Vec<Target> {
+    Agent::ALL
+        .into_iter()
+        .map(|agent| Target {
+            agent,
+            path: PathBuf::from(format!(
+                "/home/me/.{}/skills/orkestr8r/SKILL.md",
+                agent.id()
+            )),
+            found: found.contains(&agent),
+            installed: if installed.contains(&agent) {
+                Installed::Current
+            } else {
+                Installed::No
+            },
+        })
+        .collect()
+}
+
+#[test]
+fn slash_opens_the_command_line_with_suggestions() {
+    let jobs = jobs();
+    let mut app = app(&jobs);
+
+    app.on_key(key(KeyCode::Char('/')));
+    assert!(app.palette.is_some());
+    let s = screen(&app, 150, 40);
+    for text in ["COMMANDS", "/apply", "/skill", "/doctor", "Tab complete"] {
+        assert!(s.contains(text), "{text:?} not on the screen:\n{s}");
+    }
+
+    // `/di` narrows it down; Enter runs the highlighted one on the selected job.
+    typed(&mut app, "di");
+    let names: Vec<&str> = app
+        .palette
+        .as_ref()
+        .unwrap()
+        .suggestions()
+        .iter()
+        .map(|c| c.name)
+        .collect();
+    assert_eq!(names, ["discard", "diff"]);
+    app.on_key(key(KeyCode::Down));
+    assert_eq!(
+        app.on_key(key(KeyCode::Enter)),
+        Some(Action::Diff {
+            job: jobs.running.clone()
+        })
+    );
+    assert!(app.palette.is_none(), "it closes when it runs");
+
+    // A job named by its id, or the start of it: selected, then asked about.
+    app.on_key(key(KeyCode::Char('/')));
+    typed(&mut app, &format!("apply {}", &jobs.passed[..3]));
+    assert_eq!(app.on_key(key(KeyCode::Enter)), None);
+    assert_eq!(app.selected_job().unwrap().state.id, jobs.passed);
+    assert!(app.confirm.as_ref().unwrap().question.contains("passed"));
+    app.on_key(key(KeyCode::Esc));
+
+    // Unknown things say so.
+    app.on_key(key(KeyCode::Char('/')));
+    typed(&mut app, "nope");
+    assert_eq!(app.on_key(key(KeyCode::Enter)), None);
+    assert_eq!(app.message.as_ref().unwrap().tone, Tone::Bad);
+    app.on_key(key(KeyCode::Char('/')));
+    typed(&mut app, "diff zzzz");
+    app.on_key(key(KeyCode::Enter));
+    assert!(app.message.as_ref().unwrap().text.contains("no job zzzz"));
+
+    // Tab completes; Backspace on an empty line and Esc close it.
+    app.on_key(key(KeyCode::Char('/')));
+    typed(&mut app, "sq");
+    app.on_key(key(KeyCode::Tab));
+    assert_eq!(app.palette.as_ref().unwrap().input, "squash ");
+    app.on_key(key(KeyCode::Esc));
+    assert!(app.palette.is_none());
+    app.on_key(key(KeyCode::Char('/')));
+    app.on_key(key(KeyCode::Backspace));
+    assert!(app.palette.is_none());
+    // While it's open, letters are text, not keys: q doesn't quit.
+    app.on_key(key(KeyCode::Char('/')));
+    assert_eq!(app.on_key(key(KeyCode::Char('q'))), None);
+}
+
+#[test]
+fn slash_commands_run_the_clis_and_the_tuis_own() {
+    let jobs = jobs();
+    let mut app = app(&jobs);
+    let run = |app: &mut App, line: &str| {
+        app.on_key(key(KeyCode::Char('/')));
+        typed(app, line);
+        app.on_key(key(KeyCode::Enter))
+    };
+
+    assert_eq!(run(&mut app, "doctor"), Some(Action::Doctor));
+    assert_eq!(run(&mut app, "models"), Some(Action::Models));
+    assert_eq!(run(&mut app, "guide"), Some(Action::Guide));
+    assert_eq!(run(&mut app, "quit"), Some(Action::Quit));
+    assert_eq!(run(&mut app, "theme light"), None);
+    assert_eq!(app.theme.name, ThemeName::Light);
+    assert_eq!(run(&mut app, "theme"), None);
+    assert_eq!(app.theme.name, ThemeName::Dark);
+
+    assert_eq!(run(&mut app, "help"), None);
+    let Screen::Pager(pager) = &app.screen else {
+        panic!("no help: {:?}", app.screen);
+    };
+    assert_eq!(pager.kind, PagerKind::Help);
+    assert!(pager.lines.iter().any(|l| l.contains("/skill")));
+    app.on_key(key(KeyCode::Char('q')));
+    app.on_key(key(KeyCode::Char('?')));
+    assert!(matches!(&app.screen, Screen::Pager(p) if p.kind == PagerKind::Help));
+    app.on_key(key(KeyCode::Char('q')));
+
+    // Doctor's output is the point, even when a check failed (exit 1).
+    app.done(
+        &Action::Doctor,
+        Outcome {
+            code: 1,
+            stdout: "✓ config        ork.json\n✗ server        connection refused\n".into(),
+            stderr: "error: 1 of 2 checks failed\n".into(),
+        },
+    );
+    let Screen::Pager(pager) = &app.screen else {
+        panic!("no pager: {:?}", app.screen);
+    };
+    assert_eq!(pager.kind, PagerKind::Doctor);
+    assert_eq!(pager.lines.last().unwrap(), "error: 1 of 2 checks failed");
+    let s = screen(&app, 100, 20);
+    assert!(
+        s.contains("DOCTOR") && s.contains("connection refused"),
+        "{s}"
+    );
+
+    assert_eq!(Action::Doctor.args().unwrap(), ["doctor"]);
+    assert_eq!(
+        Action::InstallSkill {
+            agents: vec![Agent::Claude, Agent::OpenCode]
+        }
+        .args()
+        .unwrap(),
+        ["skill", "install", "claude", "opencode"]
+    );
+}
+
+#[test]
+fn the_picker_asks_which_agents_and_installs_for_those() {
+    let repo = TempRepo::new();
+    let mut app = App::new(JobStore::new(&repo.path), Setup::default(), ThemeName::Dark);
+    app.refresh(Utc::now());
+    app.skills = targets(&[], &[Agent::Claude, Agent::Codex]);
+    app.open_picker();
+
+    let s = screen(&app, 120, 32);
+    for text in [
+        "SET UP YOUR AGENTS",
+        "Which agents do you use?",
+        "Claude Code",
+        "OpenCode",
+        "Any other agent",
+        "on this machine",
+        "Space pick",
+    ] {
+        assert!(s.contains(text), "{text:?} not on the screen:\n{s}");
+    }
+
+    // The ones found start ticked; Space changes that; keys go to the picker, not the jobs.
+    let picker = app.picker.as_ref().unwrap();
+    assert_eq!(picker.chosen(), [Agent::Claude, Agent::Codex]);
+    assert_eq!(app.on_key(key(KeyCode::Down)), None);
+    app.on_key(key(KeyCode::Char(' '))); // OpenCode on
+    app.on_key(key(KeyCode::Down));
+    app.on_key(key(KeyCode::Char(' '))); // Codex off
+    assert_eq!(
+        app.on_key(key(KeyCode::Enter)),
+        Some(Action::InstallSkill {
+            agents: vec![Agent::Claude, Agent::OpenCode]
+        })
+    );
+    assert!(app.picker.is_none());
+
+    app.done(
+        &Action::InstallSkill {
+            agents: vec![Agent::Claude, Agent::OpenCode],
+        },
+        Outcome::default(),
+    );
+    let message = app.message.clone().unwrap();
+    assert_eq!(message.tone, Tone::Good);
+    assert!(
+        message.text.contains("Claude Code, OpenCode"),
+        "{message:?}"
+    );
+
+    // Esc skips, and says where it is.
+    app.open_picker();
+    assert_eq!(app.on_key(key(KeyCode::Esc)), None);
+    assert!(app.picker.is_none());
+    assert!(app.message.as_ref().unwrap().text.contains("/skill"));
+
+    // Nothing ticked: Enter takes the one under the cursor.
+    app.skills = targets(&[], &[]);
+    app.open_picker();
+    app.on_key(key(KeyCode::Down));
+    assert_eq!(
+        app.on_key(key(KeyCode::Enter)),
+        Some(Action::InstallSkill {
+            agents: vec![Agent::OpenCode]
+        })
+    );
+
+    // With the skill in place, the welcome says so.
+    app.skills = targets(&[Agent::Claude], &[Agent::Claude]);
+    let s = screen(&app, 120, 32);
+    assert!(s.contains("The skill is installed for Claude Code."), "{s}");
+}
+
+#[test]
+fn the_command_line_and_the_picker_fit_small_terminals() {
+    let jobs = jobs();
+    let mut app = app(&jobs);
+    app.skills = targets(&[], &[Agent::Claude]);
+    app.on_key(key(KeyCode::Char('/')));
+    for (width, height) in [(80, 24), (40, 10), (10, 3), (1, 1)] {
+        screen(&app, width, height);
+    }
+    app.on_key(key(KeyCode::Esc));
+    app.open_picker();
+    for (width, height) in [(80, 24), (40, 10), (10, 3), (1, 1)] {
+        screen(&app, width, height);
+    }
+}
+
+#[tokio::test]
+async fn ork_alone_prints_the_help_when_no_one_is_at_a_terminal() {
+    let out = run_cli(&[], &std::env::temp_dir(), Env::default()).await;
+    assert_eq!(out.code, 1);
+    assert!(out.stderr.contains("Usage: ork"), "{}", out.stderr);
+    assert!(out.stderr.contains("for the dashboard"), "{}", out.stderr);
+
+    let json = run_cli(&["--json"], &std::env::temp_dir(), Env::default()).await;
+    assert_eq!(json.code, 1);
+    let result = json_lines(&json.stdout).pop().unwrap();
+    assert!(result["error"].as_str().unwrap().contains("Usage: ork"));
+}
+
+/// Not a test: renders some screens as HTML, colours and all, to look at the design.
+/// `ORK_SHOTS=dir cargo test --all-features --test it -- --ignored tui::shots`
+#[test]
+#[ignore]
+fn shots() {
+    let Ok(dir) = std::env::var("ORK_SHOTS") else {
+        return;
+    };
+    let dir = PathBuf::from(dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let jobs = jobs();
+
+    let mut main = app(&jobs);
+    main.repo = "calc".into();
+    main.skills = targets(&[Agent::Claude], &[Agent::Claude]);
+    shot(&dir, "1-dark", &main, 150, 40);
+    main.on_key(key(KeyCode::Char('t')));
+    shot(&dir, "2-light", &main, 150, 40);
+    main.on_key(key(KeyCode::Char('t')));
+    main.on_key(key(KeyCode::Char('/')));
+    shot(&dir, "3-commands", &main, 150, 40);
+    main.on_key(key(KeyCode::Esc));
+    main.on_key(key(KeyCode::Down));
+    shot(&dir, "4-failed-80x24", &main, 80, 24);
+
+    let repo = TempRepo::new();
+    let mut empty = App::new(JobStore::new(&repo.path), setup(), ThemeName::Dark);
+    empty.refresh(Utc::now());
+    empty.repo = "calc".into();
+    empty.skills = targets(&[], &[Agent::Claude, Agent::OpenCode]);
+    empty.open_picker();
+    shot(&dir, "5-first-run", &empty, 120, 32);
+    empty.picker = None;
+    shot(&dir, "6-welcome", &empty, 120, 32);
+}
+
+fn shot(dir: &std::path::Path, name: &str, app: &App, width: u16, height: u16) {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+    terminal.draw(|frame| ui::draw(frame, app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let hex = |color: Color, default: &str| match color {
+        Color::Rgb(r, g, b) => format!("#{r:02x}{g:02x}{b:02x}"),
+        _ => default.to_string(),
+    };
+    let mut html = String::from(
+        "<!doctype html><meta charset=utf-8><style>body{margin:0;background:#000}\
+         pre{margin:0;font:15px/1.2 'Cascadia Mono','Consolas',monospace;}\
+         span{white-space:pre}</style><pre>",
+    );
+    for y in 0..height {
+        for x in 0..width {
+            let cell = &buffer[(x, y)];
+            let symbol = match cell.symbol() {
+                "&" => "&amp;",
+                "<" => "&lt;",
+                ">" => "&gt;",
+                s => s,
+            };
+            let bold = cell.modifier.contains(ratatui::style::Modifier::BOLD);
+            let reversed = cell.modifier.contains(ratatui::style::Modifier::REVERSED);
+            let (mut fg, mut bg) = (hex(cell.fg, "#f3ebd2"), hex(cell.bg, "#12160f"));
+            if reversed {
+                std::mem::swap(&mut fg, &mut bg);
+            }
+            html.push_str(&format!(
+                "<span style=\"color:{fg};background:{bg};{}\">{symbol}</span>",
+                if bold { "font-weight:bold" } else { "" }
+            ));
+        }
+        html.push('\n');
+    }
+    html.push_str("</pre>");
+    std::fs::write(dir.join(format!("{name}.html")), html).unwrap();
 }

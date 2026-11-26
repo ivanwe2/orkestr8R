@@ -59,7 +59,7 @@ impl Agent {
             Agent::OpenCode => "OpenCode",
             Agent::Codex => "Codex",
             Agent::Gemini => "Gemini CLI",
-            Agent::Other => "another agent",
+            Agent::Other => "Other agents",
         }
     }
 

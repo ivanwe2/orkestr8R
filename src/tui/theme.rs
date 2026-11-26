@@ -102,6 +102,33 @@ impl Theme {
         Style::new().fg(self.line)
     }
 
+    /// A solid label: the ground's colour on `color`, bold. Plain reverses instead.
+    pub fn pill(&self, color: Color) -> Style {
+        match self.name {
+            ThemeName::Plain => Style::new().add_modifier(Modifier::REVERSED | Modifier::BOLD),
+            _ => Style::new()
+                .fg(self.bg)
+                .bg(color)
+                .add_modifier(Modifier::BOLD),
+        }
+    }
+
+    /// A quiet label: for what's over (applied, discarded).
+    pub fn pill_quiet(&self) -> Style {
+        match self.name {
+            ThemeName::Plain => Style::new(),
+            _ => Style::new().fg(self.muted).bg(self.line),
+        }
+    }
+
+    /// The header and the status bar.
+    pub fn band(&self) -> Style {
+        match self.name {
+            ThemeName::Plain => Style::new(),
+            _ => Style::new().fg(self.text).bg(self.raised),
+        }
+    }
+
     /// The selected row. Plain has no background colour to give, so it reverses.
     pub fn selected(&self) -> Style {
         match self.name {

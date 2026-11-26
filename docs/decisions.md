@@ -4,6 +4,11 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
 
 ## 2026-11-26
 
+- **`ork` alone opens the dashboard; it sets up the agents on its first run** (Ivan: one command,
+  pick the agents, keep it open, start the agent in another window). Only when a person is at a
+  terminal; scripts and agents still get the help. The TUI gets `/` commands (a command line with
+  suggestions, like a chat box) and a bolder look: solid tabs and status pills, a header band, a
+  block-letter wordmark.
 - **`ork` installs its own skill: `ork skill install AGENT`** (Ivan: copying the folder by hand
   isn't elegant). The text is compiled in rather than downloaded, so it works offline and always
   matches the binary. It goes only to the agents named (Claude Code, OpenCode, Codex, Gemini CLI,

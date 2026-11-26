@@ -16,7 +16,10 @@ use crate::events::{EventLine, EventSink, HumanSink};
 use crate::io::SharedWriter;
 use crate::jobs::{JobState, JobStore};
 use crate::orders::JobStatus;
+use crate::skill::{Agent, Installed, Target};
 use crate::stats::{JobStats, Ledger, Place};
+use crate::tui::commands::{COMMANDS, Palette, Parsed};
+use crate::tui::picker::{self, Picked, Picker};
 use crate::tui::theme::{Theme, ThemeName};
 
 /// What the config says about models: where each server runs, and the grunt.
@@ -118,6 +121,12 @@ pub enum Action {
     Discard {
         job: String,
     },
+    Doctor,
+    Models,
+    Guide,
+    InstallSkill {
+        agents: Vec<Agent>,
+    },
 }
 
 impl Action {
@@ -129,6 +138,14 @@ impl Action {
             Action::Logs { job } => vec!["logs".into(), job.clone()],
             Action::Discard { job } => vec!["discard".into(), job.clone()],
             Action::Apply { job, .. } => vec!["apply".into(), job.clone()],
+            Action::Doctor => vec!["doctor".into()],
+            Action::Models => vec!["models".into()],
+            Action::Guide => vec!["guide".into()],
+            Action::InstallSkill { agents } => ["skill", "install"]
+                .into_iter()
+                .chain(agents.iter().map(|agent| agent.id()))
+                .map(String::from)
+                .collect(),
         };
         if let Action::Apply { squash, force, .. } = self {
             if *squash {
@@ -148,6 +165,10 @@ impl Action {
             Action::Logs { job } => format!("reading {job}'s transcript…"),
             Action::Apply { job, .. } => format!("applying {job}…"),
             Action::Discard { job } => format!("discarding {job}…"),
+            Action::Doctor => "checking the config, the server and tool calling…".into(),
+            Action::Models => "reading the models…".into(),
+            Action::Guide => "reading the guide…".into(),
+            Action::InstallSkill { .. } => "installing the skill…".into(),
             Action::Quit | Action::Refresh => String::new(),
         }
     }
@@ -201,6 +222,23 @@ pub struct Pager {
 pub enum PagerKind {
     Diff,
     Logs,
+    Doctor,
+    Models,
+    Guide,
+    Help,
+}
+
+impl PagerKind {
+    pub fn title(self) -> &'static str {
+        match self {
+            PagerKind::Diff => "DIFF",
+            PagerKind::Logs => "TRANSCRIPT",
+            PagerKind::Doctor => "DOCTOR",
+            PagerKind::Models => "MODELS",
+            PagerKind::Guide => "THE AGENTS' GUIDE",
+            PagerKind::Help => "HELP",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -253,6 +291,14 @@ pub struct App {
     pub load_error: Option<String>,
     /// The height of the last pager drawn, for paging by a screenful.
     pub page_height: Cell<usize>,
+    /// `/`: the command line, while it's open.
+    pub palette: Option<Palette>,
+    /// The agent picker, while it's open.
+    pub picker: Option<Picker>,
+    /// Each agent and its skill, for the welcome and the picker.
+    pub skills: Vec<Target>,
+    /// The repo's folder name, for the status bar.
+    pub repo: String,
 }
 
 impl App {
@@ -273,7 +319,26 @@ impl App {
             now: Utc::now(),
             load_error: None,
             page_height: Cell::new(20),
+            palette: None,
+            picker: None,
+            skills: Vec::new(),
+            repo: String::new(),
         }
+    }
+
+    /// The agents that have the skill, current or not.
+    pub fn agents_with_skill(&self) -> Vec<Agent> {
+        self.skills
+            .iter()
+            .filter(|t| t.installed != Installed::No)
+            .map(|t| t.agent)
+            .collect()
+    }
+
+    /// Opens the agent picker (`/skill`, and the first run).
+    pub fn open_picker(&mut self) {
+        self.palette = None;
+        self.picker = Some(Picker::new(&self.skills));
     }
 
     pub fn selected_job(&self) -> Option<&JobView> {
@@ -399,6 +464,23 @@ impl App {
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             return Some(Action::Quit);
         }
+        if let Some(picker) = &mut self.picker {
+            return match picker.on_key(key.code) {
+                Picked::Choosing => None,
+                Picked::Cancel => {
+                    self.picker = None;
+                    self.say(
+                        "No skill installed. /skill sets it up any time.",
+                        Tone::Info,
+                    );
+                    None
+                }
+                Picked::Install(agents) => {
+                    self.picker = None;
+                    Some(Action::InstallSkill { agents })
+                }
+            };
+        }
         if let Some(confirm) = self.confirm.take() {
             return match key.code {
                 KeyCode::Char('y' | 'Y') | KeyCode::Enter => Some(confirm.action),
@@ -410,6 +492,36 @@ impl App {
             };
         }
         self.message = None;
+        if let Some(palette) = &mut self.palette {
+            match key.code {
+                KeyCode::Esc => self.palette = None,
+                KeyCode::Enter => {
+                    let parsed = palette.parse();
+                    self.palette = None;
+                    return match parsed {
+                        Parsed::Run { name, arg } => self.run_command(name, arg),
+                        Parsed::Unknown(word) => {
+                            self.say(format!("no /{word}: /help lists them"), Tone::Bad);
+                            None
+                        }
+                        Parsed::Nothing => None,
+                    };
+                }
+                KeyCode::Backspace => {
+                    if !palette.backspace() {
+                        self.palette = None;
+                    }
+                }
+                KeyCode::Tab => palette.complete(),
+                KeyCode::Up => palette.up(),
+                KeyCode::Down => palette.down(),
+                KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    palette.push(c)
+                }
+                _ => {}
+            }
+            return None;
+        }
         match &mut self.screen {
             Screen::Pager(pager) => {
                 let page = self.page_height.get().max(1);
@@ -435,6 +547,8 @@ impl App {
     fn on_jobs_key(&mut self, code: KeyCode) -> Option<Action> {
         match code {
             KeyCode::Char('q') | KeyCode::Esc => return Some(Action::Quit),
+            KeyCode::Char('/') => self.palette = Some(Palette::default()),
+            KeyCode::Char('?') => self.show_help(),
             KeyCode::Char('r') => return Some(Action::Refresh),
             KeyCode::Char('t') => self.theme = Theme::new(self.theme.name.toggled()),
             KeyCode::Up | KeyCode::Char('k') => self.select(self.selected.saturating_sub(1)),
@@ -456,6 +570,102 @@ impl App {
             _ => {}
         }
         None
+    }
+
+    /// A slash command. Those about a job take its id (or the start of it), else the selected one.
+    fn run_command(&mut self, name: &str, arg: Option<String>) -> Option<Action> {
+        let key = match name {
+            "apply" => Some(JobKey::Apply { squash: false }),
+            "squash" => Some(JobKey::Apply { squash: true }),
+            "discard" => Some(JobKey::Discard),
+            "diff" => Some(JobKey::Diff),
+            "logs" => Some(JobKey::Logs),
+            _ => None,
+        };
+        if let Some(key) = key {
+            if let Some(id) = arg {
+                let found = self
+                    .jobs
+                    .iter()
+                    .position(|job| job.state.id == id)
+                    .or_else(|| {
+                        let matches: Vec<usize> = (0..self.jobs.len())
+                            .filter(|&i| self.jobs[i].state.id.starts_with(&id))
+                            .collect();
+                        (matches.len() == 1).then(|| matches[0])
+                    });
+                match found {
+                    Some(index) => self.select(index),
+                    None => {
+                        self.say(format!("no job {id}"), Tone::Bad);
+                        return None;
+                    }
+                }
+            }
+            if self.jobs.is_empty() {
+                self.say("no jobs yet", Tone::Info);
+                return None;
+            }
+            return self.job_action(key);
+        }
+        match name {
+            "skill" => self.open_picker(),
+            "doctor" => return Some(Action::Doctor),
+            "models" => return Some(Action::Models),
+            "guide" => return Some(Action::Guide),
+            "theme" => {
+                let name = match arg.as_deref() {
+                    Some("dark") => ThemeName::Dark,
+                    Some("light") => ThemeName::Light,
+                    Some(other) => {
+                        self.say(format!("no theme {other}: dark or light"), Tone::Bad);
+                        return None;
+                    }
+                    None => self.theme.name.toggled(),
+                };
+                // Plain stays plain: someone asked for no colours.
+                if self.theme.name != ThemeName::Plain {
+                    self.theme = Theme::new(name);
+                }
+            }
+            "help" => self.show_help(),
+            "quit" => return Some(Action::Quit),
+            _ => {}
+        }
+        None
+    }
+
+    fn show_help(&mut self) {
+        let mut lines = vec![
+            "KEYS".to_string(),
+            String::new(),
+            "  ↑ ↓  j k     pick a job".to_string(),
+            "  PgUp PgDn    scroll its events".to_string(),
+            "  d  Enter     the diff".to_string(),
+            "  l            the transcript".to_string(),
+            "  a  s         apply, squash (asks first)".to_string(),
+            "  x            discard (asks first)".to_string(),
+            "  t            dark / light".to_string(),
+            "  /            commands".to_string(),
+            "  q  Esc       quit (Ctrl+C anywhere)".to_string(),
+            String::new(),
+            "COMMANDS".to_string(),
+            String::new(),
+        ];
+        for cmd in COMMANDS {
+            lines.push(format!("  /{:<8} {:<13} {}", cmd.name, cmd.args, cmd.about));
+        }
+        lines.extend([
+            String::new(),
+            "Tab completes a command, Enter runs it; /ap Enter is /apply.".to_string(),
+            "Your agent starts the jobs (ork run); they show up here as they run.".to_string(),
+        ]);
+        self.screen = Screen::Pager(Pager {
+            kind: PagerKind::Help,
+            job: String::new(),
+            lines,
+            top: 0,
+        });
     }
 
     /// A key about the selected job: the action, a question first, or why not.
@@ -532,6 +742,27 @@ impl App {
 
     /// Takes in what an action's command printed.
     pub fn done(&mut self, action: &Action, outcome: Outcome) {
+        // Their output is the point, failed or not (doctor fails when a check does).
+        let shown = match action {
+            Action::Doctor => Some(PagerKind::Doctor),
+            Action::Models => Some(PagerKind::Models),
+            Action::Guide => Some(PagerKind::Guide),
+            _ => None,
+        };
+        if let Some(kind) = shown {
+            let mut lines = lines_or(&outcome.stdout, "nothing");
+            if outcome.code != 0 {
+                lines.push(String::new());
+                lines.push(format!("error: {}", outcome.error()));
+            }
+            self.screen = Screen::Pager(Pager {
+                kind,
+                job: String::new(),
+                lines,
+                top: 0,
+            });
+            return;
+        }
         if outcome.code != 0 {
             let error = outcome.error();
             self.say(error, Tone::Bad);
@@ -558,7 +789,17 @@ impl App {
                 let line = outcome.last_line();
                 self.say(line, Tone::Good);
             }
-            Action::Quit | Action::Refresh => {}
+            Action::InstallSkill { agents } => {
+                let names: Vec<&str> = agents.iter().map(|a| picker::label(*a)).collect();
+                self.say(
+                    format!(
+                        "Skill installed for {}. Start it in another terminal, in this repo: its jobs show up here.",
+                        names.join(", ")
+                    ),
+                    Tone::Good,
+                );
+            }
+            Action::Doctor | Action::Models | Action::Guide | Action::Quit | Action::Refresh => {}
         }
     }
 }

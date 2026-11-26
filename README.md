@@ -98,9 +98,11 @@ vLLM, LM Studio), and either Rust or a release binary.
    ```
 5. **Land it.** `ork diff k7f2` to look, then `ork apply k7f2` (or `ork discard k7f2`).
 
-**For your coding agent:** `ork skill install claude` (or `opencode`, `codex`, `gemini`, `other`:
-only the ones you name). It then knows when to delegate, and runs `ork guide` for the details
-(`--json`, long runs, reading the report).
+**Then run `ork` in the repo.** The first time, it asks which coding agents you use (Claude Code,
+OpenCode, Codex, Gemini CLI, or any that reads `.agents/skills`) and installs its skill for them,
+so they know when to delegate; they run `ork guide` for the details. Leave it open as the dashboard
+and start your agent in another terminal: its jobs show up as they run. Scripts name the agents
+instead: `ork skill install claude`.
 
 ## Commands
 
@@ -116,7 +118,7 @@ only the ones you name). It then knows when to delegate, and runs `ork guide` fo
 | `ork apply JOB` · `ork discard JOB` | merge it into your branch; drop it |
 | `ork guide` | the guide for AI agents |
 | `ork skill install AGENT` | teach your agent to delegate: Claude Code, OpenCode, Codex, Gemini CLI, or any that reads `.agents/skills` |
-| `ork tui` | a live view: jobs, tokens, speed and cost per model (local or cloud); diff and apply on keys |
+| `ork` · `ork tui` | the dashboard: jobs, tokens, speed and cost per model (local or cloud); diff and apply on keys; `/` commands |
 
 Every command but `ork tui` takes `--json`: one event per line on stdout, the last one always `result`; exit codes
 0 done, 1 error, 4 checks failed or gave up. The contract is [docs/cli.md](docs/cli.md).

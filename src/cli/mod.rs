@@ -7,6 +7,7 @@ pub mod exit;
 
 use std::any::Any;
 use std::future::Future;
+use std::io::IsTerminal;
 use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 
@@ -25,8 +26,7 @@ use crate::io::{Captured, SharedWriter};
     name = "ork",
     version,
     about = "orkestr8R: run coding orders on a local model, in git worktrees, checked with real commands.",
-    arg_required_else_help = true,
-    subcommand_required = true,
+    after_help = "Run `ork` alone in a terminal for the dashboard (the same as `ork tui`).",
     disable_help_subcommand = true
 )]
 pub struct Cli {
@@ -34,8 +34,9 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// None: the dashboard in a terminal, the help anywhere else.
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -80,6 +81,8 @@ pub fn command() -> clap::Command {
 pub struct CliIo {
     pub stdout: SharedWriter,
     pub stderr: SharedWriter,
+    /// A person at a real terminal (stdin and stdout both): the TUI and the pickers need one.
+    pub terminal: bool,
 }
 
 impl CliIo {
@@ -88,6 +91,7 @@ impl CliIo {
         Self {
             stdout: SharedWriter::stdout(),
             stderr: SharedWriter::stderr(),
+            terminal: std::io::stdout().is_terminal() && std::io::stdin().is_terminal(),
         }
     }
 
@@ -95,7 +99,15 @@ impl CliIo {
     pub fn capture() -> (Self, Captured, Captured) {
         let (stdout, out) = SharedWriter::capture();
         let (stderr, err) = SharedWriter::capture();
-        (Self { stdout, stderr }, out, err)
+        (
+            Self {
+                stdout,
+                stderr,
+                terminal: false,
+            },
+            out,
+            err,
+        )
     }
 }
 
@@ -111,8 +123,25 @@ pub async fn run(
         Ok(cli) => cli,
         Err(err) => return parse_error(&io, err, args.iter().any(|a| a == "--json")),
     };
+    let Some(command) = cli.command else {
+        // `ork` alone: a person gets the dashboard; a script or an agent, the help (as an error,
+        // as before: it named no command).
+        if io.terminal && !cli.json {
+            let ctx = CliContext::new(io, cwd, env, cancel, false);
+            return complete(&ctx, commands::tui::run(&ctx)).await;
+        }
+        let help = command().render_help().to_string();
+        return if cli.json {
+            let result = CommandResult::error(help.trim());
+            io.stdout.write_line(&result.into_event().to_line());
+            exit::ERROR
+        } else {
+            io.stderr.write_str(&help);
+            exit::ERROR
+        };
+    };
     let ctx = CliContext::new(io, cwd, env, cancel, cli.json);
-    match cli.command {
+    match command {
         Commands::Init(args) => complete(&ctx, commands::init::run(&ctx, args)).await,
         Commands::Doctor => complete(&ctx, commands::doctor::run(&ctx)).await,
         Commands::Models(args) => complete(&ctx, commands::models::run(&ctx, args)).await,
