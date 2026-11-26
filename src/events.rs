@@ -7,6 +7,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 
+use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -44,6 +45,9 @@ pub enum OrkEvent {
         seconds: f64,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         tokens_per_second: Option<f64>,
+        /// What the request cost in US dollars, when the server says (OpenRouter does).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cost: Option<f64>,
     },
     /// One tool call. `args` has strings over 200 chars replaced by `"<N chars>"`.
     Tool {
@@ -92,11 +96,43 @@ pub enum OrkEvent {
 }
 
 impl OrkEvent {
-    /// The event as one line of JSON.
+    /// The event as one line of JSON, stamped with the time now.
     pub fn to_line(&self) -> String {
+        self.to_line_at(Utc::now())
+    }
+
+    /// The event as one line of JSON, with `ts` (RFC 3339, UTC, milliseconds) as its second key:
+    /// `{"event":"call","ts":"2026-11-26T16:02:11.123Z",…}`.
+    pub fn to_line_at(&self, ts: DateTime<Utc>) -> String {
         // These types always serialize: string keys only, and serde_json writes non-finite floats
         // as null.
-        serde_json::to_string(self).expect("an OrkEvent always serializes")
+        let json = serde_json::to_string(self).expect("an OrkEvent always serializes");
+        // serde writes the tag first, `{"event":"call"`, so the time goes right after it. Event
+        // names are snake_case: the tag's closing quote is the first quote after the prefix.
+        const PREFIX: &str = r#"{"event":""#;
+        debug_assert!(json.starts_with(PREFIX), "{json}");
+        let tag_end = json[PREFIX.len()..]
+            .find('"')
+            .map_or(json.len() - 1, |i| PREFIX.len() + i + 1);
+        let ts = ts.to_rfc3339_opts(SecondsFormat::Millis, true);
+        format!(r#"{},"ts":"{ts}"{}"#, &json[..tag_end], &json[tag_end..])
+    }
+}
+
+/// One line of an events log, with its time. Lines from before events had times (v0.1 dogfood
+/// jobs) have no `ts`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct EventLine {
+    #[serde(default)]
+    pub ts: Option<DateTime<Utc>>,
+    #[serde(flatten)]
+    pub event: OrkEvent,
+}
+
+impl EventLine {
+    /// Parses one line; `None` for a line that isn't an event (a log cut mid-line, say).
+    pub fn parse(line: &str) -> Option<Self> {
+        serde_json::from_str(line).ok()
     }
 }
 

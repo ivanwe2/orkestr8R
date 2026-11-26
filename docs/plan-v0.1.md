@@ -251,17 +251,19 @@ pub struct Report {
 pub struct JobState {
     pub id: String, pub status: JobStatus, pub goal: String, pub base_sha: String,
     pub branch: String, pub worktree: String,
-    pub created_at: DateTime<Utc>, pub updated_at: DateTime<Utc>, pub reason: Option<String>,
+    pub created_at: DateTime<Utc>, pub updated_at: DateTime<Utc>,
+    pub finished_at: Option<DateTime<Utc>>,   // set once, when the run ends (#32)
+    pub reason: Option<String>,
 }
 
-// events.rs: internally tagged, so "event" is always the first key
+// events.rs: internally tagged, so "event" is always the first key; to_line() puts "ts" second (#32)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum OrkEvent {
     Start { command: String, job: Option<String>, branch: Option<String>, worktree: Option<String>,
             role: Option<String>, model: Option<String>, server: Option<String> },
     Call { turn: u32, model: String, server: String, tokens_in: u64, tokens_out: u64,
-           seconds: f64, tokens_per_second: Option<f64> },
+           seconds: f64, tokens_per_second: Option<f64>, cost: Option<f64> },
     Tool { turn: u32, name: String, args: Option<Value>, ok: bool, ms: u64,
            error: Option<String> },   // args: strings over 200 chars replaced by "<N chars>"
     Finish { turn: u32, summary: String },

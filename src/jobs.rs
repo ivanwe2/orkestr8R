@@ -45,6 +45,10 @@ pub struct JobState {
     pub worktree: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// When the run ended (passed, failed_checks, gave_up or error). `updated_at` moves again on
+    /// apply or discard; this doesn't.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -114,6 +118,7 @@ impl JobStore {
             worktree: format!(".ork/worktrees/{id}"),
             created_at: now,
             updated_at: now,
+            finished_at: None,
             reason: None,
             id,
         };
@@ -178,9 +183,17 @@ impl JobStore {
         reason: Option<String>,
     ) -> anyhow::Result<JobState> {
         let mut state = self.load(id)?;
+        let now = Utc::now();
+        let finishes = matches!(
+            status,
+            JobStatus::Passed | JobStatus::FailedChecks | JobStatus::GaveUp | JobStatus::Error
+        );
+        if finishes && state.finished_at.is_none() {
+            state.finished_at = Some(now);
+        }
         state.status = status;
         state.reason = reason;
-        state.updated_at = Utc::now();
+        state.updated_at = now;
         write_atomic(&self.paths(id).state, &serde_json::to_vec_pretty(&state)?)?;
         Ok(state)
     }

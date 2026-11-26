@@ -292,6 +292,16 @@ fn the_job_store_keeps_state_order_and_report() {
     assert_eq!(store.load(&first.id).unwrap(), updated);
     assert_eq!(updated.reason.as_deref(), Some("max_turns"));
     assert!(updated.updated_at >= first.updated_at);
+    assert_eq!(first.finished_at, None, "a new job is still running");
+    let finished = updated.finished_at.expect("giving up ends the run");
+    let discarded = store
+        .set_status(&first.id, JobStatus::Discarded, None)
+        .unwrap();
+    assert_eq!(
+        discarded.finished_at,
+        Some(finished),
+        "discarding later doesn't move the end"
+    );
 
     assert_eq!(store.load_report(&first.id).unwrap(), None);
     let report = Report {

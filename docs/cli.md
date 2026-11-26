@@ -56,9 +56,12 @@ ork models --server NAME --url URL [--key-env VAR] [--remove]
 Every command takes `--json`. Messages for people go to stderr. stdout carries one JSON object per
 line, and the last line is always `result`.
 
+Every event has `event` first and then `ts`, when it happened (RFC 3339, UTC, milliseconds); the
+examples below leave `ts` out after the first two.
+
 ```
-{"event": "start", "command": "run", "job": "k7f2", "branch": "ork/k7f2", "worktree": ".ork/worktrees/k7f2", "role": "grunt", "model": "qwen-27b", "server": "box"}
-{"event": "call", "turn": 1, "model": "qwen-27b", "server": "box", "tokens_in": 6120, "tokens_out": 212, "seconds": 4.1, "tokens_per_second": 51.7}
+{"event": "start", "ts": "2026-11-26T16:02:11.123Z", "command": "run", "job": "k7f2", "branch": "ork/k7f2", "worktree": ".ork/worktrees/k7f2", "role": "grunt", "model": "qwen-27b", "server": "box"}
+{"event": "call", "ts": "2026-11-26T16:02:15.301Z", "turn": 1, "model": "qwen-27b", "server": "box", "tokens_in": 6120, "tokens_out": 212, "seconds": 4.1, "tokens_per_second": 51.7}
 {"event": "tool", "turn": 1, "name": "read_file", "args": {"path": "src/Orders/OrderQuery.cs"}, "ok": true, "ms": 3}
 {"event": "tool", "turn": 6, "name": "edit_file", "args": {"path": "src/Orders/OrderQuery.cs"}, "ok": true, "ms": 2}
 {"event": "finish", "turn": 9, "summary": "Added page and pageSize …"}
@@ -71,7 +74,7 @@ line, and the last line is always `result`.
 | Event | When |
 |---|---|
 | `start` | the command started; for `run`: job, branch, worktree, role, model, server |
-| `call` | every model request: model, server, tokens in/out, seconds, tokens per second |
+| `call` | every model request: model, server, tokens in/out, seconds, tokens per second; `cost` in US dollars when the server reports one (OpenRouter does) |
 | `tool` | every tool call: name, short args, ok, ms (errors carry `error`) |
 | `finish` | the grunt called `finish` |
 | `check` | every check: command, exit code, seconds, last lines |

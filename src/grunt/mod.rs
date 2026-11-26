@@ -334,6 +334,7 @@ impl<'a> GruntLoop<'a> {
             tokens_out: reply.tokens_out,
             seconds: reply.seconds,
             tokens_per_second: reply.tokens_per_second,
+            cost: reply.cost,
         });
         for code in &reply.warnings {
             self.events.emit(&OrkEvent::Warning {

@@ -266,6 +266,7 @@ pub fn parse_reply(raw: &str, seconds: f64) -> anyhow::Result<ModelReply> {
     let tokens_per_second = body["timings"]["predicted_per_second"]
         .as_f64()
         .or_else(|| (tokens_out > 0 && seconds > 0.0).then(|| tokens_out as f64 / seconds));
+    let cost = body["usage"]["cost"].as_f64();
     let reasoning = message["reasoning_content"]
         .as_str()
         .or_else(|| message["reasoning"].as_str())
@@ -280,6 +281,7 @@ pub fn parse_reply(raw: &str, seconds: f64) -> anyhow::Result<ModelReply> {
         tokens_out,
         seconds,
         tokens_per_second,
+        cost,
         warnings,
         raw_json: raw.to_string(),
     })

@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use orkestr8r::cli::{self, CliContext, CliIo, CommandResult, exit};
 use orkestr8r::env::Env;
-use orkestr8r::events::{EventSink, FileSink, HumanSink, OrkEvent};
+use orkestr8r::events::{EventLine, EventSink, FileSink, HumanSink, OrkEvent};
 use orkestr8r::io::{Captured, SharedWriter};
 use orkestr8r::orders::{CheckResult, FileChange, JobStatus, Report, TokenCount};
 use serde_json::{Value, json};
@@ -84,6 +84,7 @@ fn every_event_round_trips_with_event_first() {
                 tokens_out: 212,
                 seconds: 4.1,
                 tokens_per_second: Some(51.7),
+                cost: Some(0.00042),
             },
         ),
         (
@@ -143,6 +144,41 @@ fn every_event_round_trips_with_event_first() {
         let back: OrkEvent = serde_json::from_str(&line).unwrap();
         assert_eq!(back, event);
     }
+}
+
+#[test]
+fn every_line_has_its_time_second_and_reads_back() {
+    let ts = "2026-11-26T16:02:11.123Z".parse().unwrap();
+
+    let line = OrkEvent::Repair { attempt: 1 }.to_line_at(ts);
+    assert_eq!(
+        line,
+        r#"{"event":"repair","ts":"2026-11-26T16:02:11.123Z","attempt":1}"#
+    );
+    let back = EventLine::parse(&line).unwrap();
+    assert_eq!(back.ts, Some(ts));
+    assert_eq!(back.event, OrkEvent::Repair { attempt: 1 });
+
+    // An event whose other fields are all left out still gets its time.
+    let report_only = OrkEvent::Result {
+        status: "ok".into(),
+        exit_code: 0,
+        job: None,
+        report: None,
+        data: None,
+        error: None,
+    };
+    let line = report_only.to_line_at(ts);
+    assert!(
+        line.starts_with(r#"{"event":"result","ts":"2026-11-26T16:02:11.123Z","status""#),
+        "{line}"
+    );
+    assert_eq!(EventLine::parse(&line).unwrap().event, report_only);
+
+    // Logs from before events had times still read; a torn last line doesn't.
+    let old = EventLine::parse(r#"{"event":"repair","attempt":2}"#).unwrap();
+    assert_eq!(old.ts, None);
+    assert_eq!(EventLine::parse(r#"{"event":"rep"#), None);
 }
 
 #[test]
@@ -261,6 +297,7 @@ fn human_lines_put_the_call_on_its_first_tool_line() {
         tokens_out: 212,
         seconds: 4.1,
         tokens_per_second: Some(51.7),
+        cost: None,
     });
     sink.emit(&OrkEvent::Tool {
         turn: 1,
