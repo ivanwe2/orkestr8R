@@ -862,6 +862,14 @@ fn shots() {
     main.on_key(key(KeyCode::Down));
     shot(&dir, "4-failed-80x24", &main, 80, 24);
 
+    // The README's screenshot.
+    let (_demo_repo, demo_store, demo_now) = demo();
+    let mut readme = App::new(demo_store, demo_setup(), ThemeName::Dark);
+    readme.refresh(demo_now);
+    readme.repo = "my-app".into();
+    readme.skills = targets(&[Agent::Claude], &[Agent::Claude]);
+    shot(&dir, "0-readme", &readme, 140, 30);
+
     let repo = TempRepo::new();
     let mut empty = App::new(JobStore::new(&repo.path), setup(), ThemeName::Dark);
     empty.refresh(Utc::now());
@@ -873,6 +881,170 @@ fn shots() {
     shot(&dir, "6-welcome", &empty, 120, 32);
 }
 
+fn demo_setup() -> Setup {
+    let config: OrkConfig = serde_json::from_value(json!({
+        "servers": {
+            "box": { "url": "http://gpu-box:9876/v1" },
+            "router": { "url": "https://openrouter.ai/api/v1" }
+        },
+        "roles": { "grunt": { "server": "box", "model": "qwen3-coder", "context_tokens": 65536 } }
+    }))
+    .unwrap();
+    Setup::from_config(&config)
+}
+
+/// A repo for the README's screenshot: a run under way with a repair behind it, and jobs in the
+/// other states, on a local and a cloud model.
+fn demo() -> (TempRepo, JobStore, DateTime<Utc>) {
+    let repo = TempRepo::new();
+    let store = JobStore::new(&repo.path);
+    let write = |id: &str, events: &[OrkEvent]| {
+        let lines: String = events.iter().map(|e| e.to_line() + "\n").collect();
+        std::fs::write(store.paths(id).events, lines).unwrap();
+    };
+    let order = |goal: &str| Order {
+        goal: goal.into(),
+        max_turns: Some(40),
+        ..Default::default()
+    };
+    let call =
+        |turn: u32, model: &str, server: &str, tokens_in: u64, out: u64, tps: f64| OrkEvent::Call {
+            turn,
+            model: model.into(),
+            server: server.into(),
+            tokens_in,
+            tokens_out: out,
+            seconds: out as f64 / tps + 1.2,
+            tokens_per_second: Some(tps),
+            cost: (server == "router").then_some(tokens_in as f64 * 0.000_000_3),
+        };
+    let local = |turn: u32, tokens_in: u64, out: u64, tps: f64| {
+        call(turn, "qwen3-coder", "box", tokens_in, out, tps)
+    };
+    let tool = |turn: u32, name: &str, path: &str, ok: bool| OrkEvent::Tool {
+        turn,
+        name: name.into(),
+        args: Some(json!({ "path": path })),
+        ok,
+        ms: 3,
+        error: (!ok).then(|| "old_string not found in the file".into()),
+    };
+    let check = |cmd: &str, exit: i32, seconds: f64| OrkEvent::Check {
+        cmd: cmd.into(),
+        exit,
+        seconds,
+        tail: String::new(),
+    };
+    let pause = || std::thread::sleep(std::time::Duration::from_millis(5));
+
+    let applied = store
+        .create(&order("Tests for parse_duration in src/time.rs"), "abc123")
+        .unwrap()
+        .id;
+    write(
+        &applied,
+        &[
+            local(1, 5800, 96, 48.0),
+            tool(1, "read_file", "src/time.rs", true),
+            local(2, 6900, 612, 45.0),
+            tool(2, "write_file", "tests/time.rs", true),
+            OrkEvent::Finish {
+                turn: 3,
+                summary: "Added 6 tests".into(),
+            },
+            check("npm run test:int", 0, 8.1),
+        ],
+    );
+    store.set_status(&applied, JobStatus::Passed, None).unwrap();
+    store
+        .set_status(&applied, JobStatus::Applied, None)
+        .unwrap();
+    pause();
+
+    let failed = store
+        .create(
+            &order("Port the CSV export to the streaming writer"),
+            "abc123",
+        )
+        .unwrap()
+        .id;
+    write(
+        &failed,
+        &[
+            call(1, "deepseek-v4", "router", 9100, 840, 92.0),
+            tool(1, "read_file", "src/export/csv.ts", true),
+            call(2, "deepseek-v4", "router", 12400, 1210, 88.0),
+            tool(2, "edit_file", "src/export/csv.ts", false),
+            check("npm run test:int", 1, 11.4),
+        ],
+    );
+    store
+        .set_status(
+            &failed,
+            JobStatus::FailedChecks,
+            Some("checks failed".into()),
+        )
+        .unwrap();
+    pause();
+
+    let passed = store
+        .create(&order("Pagination for GET /api/orders"), "abc123")
+        .unwrap()
+        .id;
+    write(
+        &passed,
+        &[
+            local(1, 7200, 140, 47.0),
+            tool(1, "read_file", "src/orders/route.ts", true),
+            local(2, 9800, 920, 46.0),
+            tool(2, "edit_file", "src/orders/route.ts", true),
+            OrkEvent::Finish {
+                turn: 3,
+                summary: "Added page and limit".into(),
+            },
+            check("npm run test:int", 0, 9.0),
+        ],
+    );
+    store.set_status(&passed, JobStatus::Passed, None).unwrap();
+    store
+        .write_report(&passed, &report(&passed, JobStatus::Passed, 3))
+        .unwrap();
+    pause();
+
+    let running_state = store
+        .create(&order("Rate limiting for the login endpoint"), "abc123")
+        .unwrap();
+    let running = running_state.id.clone();
+    let mut events = vec![
+        local(1, 6100, 120, 51.0),
+        tool(1, "read_file", "src/auth/login.ts", true),
+        local(2, 9400, 210, 49.0),
+        tool(2, "grep", "src/", true),
+        local(3, 12800, 880, 47.0),
+        tool(3, "write_file", "src/auth/limiter.ts", true),
+        local(4, 16100, 640, 46.0),
+        tool(4, "edit_file", "src/auth/login.ts", false),
+        local(5, 17300, 420, 46.0),
+        tool(5, "edit_file", "src/auth/login.ts", true),
+        local(6, 19900, 96, 45.0),
+        OrkEvent::Finish {
+            turn: 6,
+            summary: "Added a token bucket per IP".into(),
+        },
+        check("npm run test:int", 1, 10.2),
+        OrkEvent::Repair { attempt: 1 },
+        local(7, 23600, 310, 44.0),
+        tool(7, "read_file", "tests/auth/login.test.ts", true),
+        local(8, 26200, 540, 44.0),
+        tool(8, "edit_file", "src/auth/limiter.ts", true),
+    ];
+    events.push(local(9, 28400, 180, 45.0));
+    write(&running, &events);
+
+    let now = running_state.created_at + Duration::seconds(252);
+    (repo, store, now)
+}
+
 fn shot(dir: &std::path::Path, name: &str, app: &App, width: u16, height: u16) {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal.draw(|frame| ui::draw(frame, app)).unwrap();
@@ -882,8 +1054,8 @@ fn shot(dir: &std::path::Path, name: &str, app: &App, width: u16, height: u16) {
         _ => default.to_string(),
     };
     let mut html = String::from(
-        "<!doctype html><meta charset=utf-8><style>body{margin:0;background:#000}\
-         pre{margin:0;font:15px/1.2 'Cascadia Mono','Consolas',monospace;}\
+        "<!doctype html><meta charset=utf-8><style>body{margin:0;background:#12160f}\
+         pre{margin:0;padding:14px 16px;font:15px/1.13 'Cascadia Mono','Consolas',monospace;}\
          span{white-space:pre}</style><pre>",
     );
     for y in 0..height {

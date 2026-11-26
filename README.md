@@ -6,15 +6,32 @@
 
 <p align="center">
   <b>Frontier plans. Local executes.</b><br>
-  Claude Code or OpenCode hands real coding work to your own models. The work is run, checked and
-  reported back, so you stop copy-pasting plans between them.
+  A delegation harness: your coding agent (Claude Code, OpenCode, Codex, Gemini CLI) hands
+  checkable work to your own models. orkestr8R runs it in a git worktree, checks it with real
+  commands and reports back, so you stop copy-pasting plans between them.
 </p>
 
 <p align="center">
   <a href="https://github.com/ivanwe2/orkestr8R/actions/workflows/ci.yml"><img src="https://github.com/ivanwe2/orkestr8R/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/ivanwe2/orkestr8R/releases"><img src="https://img.shields.io/github/v/release/ivanwe2/orkestr8R?include_prereleases&label=release" alt="release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
-  <img src="https://img.shields.io/badge/rust-2024_edition-orange" alt="Rust 2024">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ivanwe2/orkestr8R" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/rust-1.99_·_2024_edition-orange?logo=rust" alt="Rust 1.99, 2024 edition">
+  <img src="https://img.shields.io/badge/platform-Linux_|_Windows-informational" alt="Linux and Windows">
+  <br>
+  <img src="https://img.shields.io/badge/agents-Claude_Code_·_OpenCode_·_Codex_·_Gemini_CLI-5DAE3F" alt="Works with Claude Code, OpenCode, Codex and Gemini CLI">
+  <img src="https://img.shields.io/badge/models-any_OpenAI--compatible_server-FFB627" alt="Any OpenAI-compatible server">
+</p>
+
+<p align="center">
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#the-dashboard">The dashboard</a> ·
+  <a href="docs/cli.md">CLI contract</a> ·
+  <a href="docs/ideas.md">Ideas and roadmap</a>
+</p>
+
+<p align="center">
+  <img src="assets/screenshots/dashboard.png" width="100%" alt="The ork dashboard: the jobs, a live speed meter, tokens and cost per model (local and cloud), and a running job's track, events and context">
 </p>
 
 > [!NOTE]
@@ -124,6 +141,21 @@ instead: `ork skill install claude`.
 
 Every command but `ork tui` takes `--json`: one event per line on stdout, the last one always `result`; exit codes
 0 done, 1 error, 4 checks failed or gave up. The contract is [docs/cli.md](docs/cli.md).
+
+## The dashboard
+
+Run `ork` in a repo and leave it open while your agent works in another terminal:
+
+- **jobs** as they run, a spinner on the running ones, each status as a coloured pill;
+- **models**: the live speed in big digits beside an LED meter, and a ledger of every model the
+  repo's jobs used: calls, tokens in and out, tokens per second, cost, local or cloud;
+- **the selected job**: a clock, the turn-by-turn track (▮ a turn, red if a tool failed, ◆ finish,
+  ✓ ✗ checks, ↻ a repair), how full the context is, and its events;
+- **keys** to diff, read the transcript, apply, squash or discard (changes ask first), and **`/`
+  commands** with suggestions: `/apply`, `/diff`, `/skill`, `/doctor`, `/theme`, `/help`, …
+
+The first time, it asks which coding agents you use and installs its skill for them. Dark and light
+themes in the brand's colours; `NO_COLOR` is respected.
 
 ## Safety, briefly
 
