@@ -81,7 +81,9 @@ to `ork run - --json`: no quoting trouble with long goals (PowerShell), and no t
 
 A run takes minutes, often 5–20. If your shell tool has a time limit, start `ork run --json` in the
 background, read the job id from the first line (`start`), and poll `ork status JOB --json` until
-its result's `status` isn't `running`. That result is then the same one the run returned.
+its result's `status` isn't `running`. That result is then the same one the run returned. If the
+`ork` running it was killed (a closed terminal, a crash), `status` says `error` with a reason that
+starts `ork stopped` after 90 seconds without its heartbeat: stop polling and `ork discard` it.
 
 ## Reading the result
 

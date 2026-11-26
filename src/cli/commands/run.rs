@@ -125,7 +125,18 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
         });
     }
 
-    // 5. The run.
+    // 5. The run, with a heartbeat while it lasts: readers tell a live run from one whose process
+    // died (the job would otherwise stay `running` forever).
+    let _heartbeat = {
+        let (store, id) = (store.clone(), job.id.clone());
+        AbortOnDrop(tokio::spawn(async move {
+            let mut tick = tokio::time::interval(crate::jobs::BEAT);
+            loop {
+                tick.tick().await;
+                let _ = store.beat(&id);
+            }
+        }))
+    };
     let service = RunService {
         model: &client,
         config,
@@ -263,5 +274,14 @@ fn print_summary(ctx: &CliContext, report: &Report, readonly: bool) {
         ctx.say(&format!(
             "next: ork diff {id} · ork logs {id} · ork discard {id}"
         ));
+    }
+}
+
+/// Stops a background task when it goes out of scope, however the scope ends.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
     }
 }

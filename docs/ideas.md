@@ -61,7 +61,7 @@ environment, not in the order, check, report loop. It hadn't run a write order y
 | `ork allow CMD [--repo]` | Only if editing `ork.json` turns out to be a real hurdle. | not filed |
 
 Tracked elsewhere: the web UI (#31), v0.2 MCP and background jobs (#27), a dead run stays
-"running" (#21), a thinking switch per role (#33), a token budget per order (#24), shrinking big
+"running" (#21, fixed with a heartbeat), a thinking switch per role (#33), a token budget per order (#24), shrinking big
 tool arguments (#23), sandboxing (#20), Rust checks on Windows without MSVC (#19).
 
 ## Naming
