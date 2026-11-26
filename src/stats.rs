@@ -186,6 +186,8 @@ pub struct JobStats {
     /// The times of the first and the last event that had one.
     pub first_ts: Option<DateTime<Utc>>,
     pub last_ts: Option<DateTime<Utc>>,
+    /// The files `read_file` read, each once, in the order first read.
+    pub files_read: Vec<String>,
 }
 
 impl JobStats {
@@ -238,8 +240,17 @@ impl JobStats {
                     ts: line.ts,
                 });
             }
-            OrkEvent::Tool { ok, ms, .. } => {
+            OrkEvent::Tool {
+                ok, ms, name, args, ..
+            } => {
                 self.tools += 1;
+                if *ok
+                    && name == "read_file"
+                    && let Some(path) = args.as_ref().and_then(|a| a["path"].as_str())
+                    && !self.files_read.iter().any(|p| p == path)
+                {
+                    self.files_read.push(path.to_string());
+                }
                 self.tool_seconds += *ms as f64 / 1000.0;
                 if !ok {
                     self.tool_errors += 1;

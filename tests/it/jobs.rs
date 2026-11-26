@@ -436,3 +436,64 @@ async fn an_unknown_job_is_an_error() {
             .contains("no job zzzz")
     );
 }
+
+#[tokio::test]
+async fn a_read_only_job_cleans_up_after_itself_and_has_nothing_to_apply() {
+    let server = FakeModelServer::start(
+        Script::new()
+            .tool_call("read_file", json!({ "path": "src/calc.rs" }))
+            .tool_call(
+                "finish",
+                json!({ "summary": "One function: one(), src/calc.rs:1" }),
+            ),
+    )
+    .await;
+    let ws = Workspace::new(&server.base_url(), &["git grep"]);
+    ws.write("src/calc.rs", CALC);
+    ws.commit("initial");
+
+    let out = run_cli(
+        &[
+            "run",
+            "--goal",
+            "Which functions does src/calc.rs have?",
+            "--readonly",
+            "--json",
+        ],
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::OK, "{}", out.stderr);
+    let events = json_lines(&out.stdout);
+    let job = events[0]["job"].as_str().unwrap().to_string();
+    let report = &events.last().unwrap()["report"];
+    assert_eq!(report["files_read"], json!(["src/calc.rs"]));
+    assert_eq!(report["tool_calls"], 1);
+    assert!(!ws.repo.join(".ork/worktrees").join(&job).exists());
+    let branches = git(&ws.repo, &["branch", "--list", &format!("ork/{job}")]);
+    assert!(branches.trim().is_empty(), "{branches}");
+
+    let (code, events, _) = ork(&ws, &["apply", &job]).await;
+    assert_eq!(code, exit::ERROR);
+    let error = events.last().unwrap()["error"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        error.contains("read-only") && error.contains("nothing to apply"),
+        "{error}"
+    );
+    let (code, events, _) = ork(&ws, &["diff", &job]).await;
+    assert_eq!(code, exit::ERROR);
+    assert!(
+        events.last().unwrap()["error"]
+            .as_str()
+            .unwrap()
+            .contains("changed nothing")
+    );
+    // discard still works: it marks the job done
+    let (code, _, _) = ork(&ws, &["discard", &job]).await;
+    assert_eq!(code, exit::OK);
+}
