@@ -365,6 +365,9 @@ fn the_selection_follows_its_job_as_new_ones_arrive() {
     let mut app = app(&jobs);
     app.on_key(key(KeyCode::Down));
     assert_eq!(app.selected_job().unwrap().state.id, jobs.failed);
+    app.on_key(key(KeyCode::PageUp));
+    let scrolled = app.scroll;
+    assert!(scrolled > 0, "scrolled back through its events");
 
     jobs.store
         .create(
@@ -379,6 +382,10 @@ fn the_selection_follows_its_job_as_new_ones_arrive() {
 
     assert_eq!(app.jobs.len(), 4);
     assert_eq!(app.selected_job().unwrap().state.id, jobs.failed);
+    assert_eq!(app.scroll, scrolled, "the same job keeps its scroll");
+
+    app.on_key(key(KeyCode::Up));
+    assert_eq!(app.scroll, 0, "another job starts at its tail");
 }
 
 #[test]

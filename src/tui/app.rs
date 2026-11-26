@@ -372,12 +372,15 @@ impl App {
         cached
     }
 
+    /// Selects by position. The scroll goes back to the tail only when it's another job: a new
+    /// job arriving moves the positions, not the selection.
     fn select(&mut self, index: usize) {
-        if index != self.selected {
+        let id = self.jobs.get(index).map(|job| job.state.id.clone());
+        if id != self.selected_id {
             self.scroll = 0;
         }
         self.selected = index;
-        self.selected_id = self.jobs.get(index).map(|job| job.state.id.clone());
+        self.selected_id = id;
     }
 
     fn say(&mut self, text: impl Into<String>, tone: Tone) {
