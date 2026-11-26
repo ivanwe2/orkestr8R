@@ -1204,13 +1204,19 @@ before a stop.
 **Branch** `release/v0.1.0` · **Depends on** T15 · **Who** Ivan + frontier
 
 **Steps** (Ivan runs them, one at a time; agents say each command and wait for the output)
-1. **Laptop:** `cargo install --path . --locked`, then `ork --version`.
-2. **Laptop:** `ork init --user --url http://<gpu-box>:9876/v1 --model <llama-swap model> --key-env LLAMA_API_KEY`.
+1. **Laptop:** `cargo install --path . --locked`, then `ork --version`. On Windows without the
+   MSVC build tools: `scripts/build-windows.sh` (a native `ork.exe` cross-compiled in Docker), then
+   put `target-win/ork.exe` on PATH.
+2. **Laptop:** `ork init --user --url <server url>/v1 --model <model> [--key-env <VARIABLE>]` (Ivan fills in
+   his own server; nothing about it goes into the repo).
 3. **Ask first:** is the GPU box free? `ork doctor` makes llama-swap load the model there.
 4. **Laptop:** `ork doctor`. It must be all green.
 5. **Five hand-written orders** on a real repo.
    - Good candidates are small, real tasks in this repo: a missing test, a small refactor, a doc
      fix. Checks like `cargo test --all-features --test it tools::` keep them fast.
+   - The checks run on the machine `ork` runs on. A Windows machine without the MSVC build tools
+     can't link Rust, so it can't run this repo's checks: dogfood there on a repo whose checks it
+     can run, or run `ork` where Rust links (Linux, WSL, or with the build tools).
    - Log each in `docs/dogfood/v0.1.md`: the order, status, turns, repairs, minutes, tokens and
      tokens per second, and what went wrong.
    - Tune `prompts::GRUNT_SYSTEM` and the limits from what you see.
@@ -1219,7 +1225,7 @@ before a stop.
 7. **Release:**
    - set `version = "0.1.0"`;
    - update `docs/decisions.md` with what dogfooding changed;
-   - a release workflow (`.github/workflows/release.yml`, Ivan merges it) that builds `ork` for
+   - the release workflow (`.github/workflows/release.yml`, added with the repo setup) builds `ork` for
      x86_64 Linux and Windows on a `v*` tag and attaches them to the GitHub release;
    - tag `v0.1.0`.
    - Publishing to crates.io is a separate decision.

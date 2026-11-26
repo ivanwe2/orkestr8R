@@ -4,12 +4,22 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to the same PR cancels the run that's now out of date.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
 
 jobs:
+  # The job names ("build (ubuntu-latest)", "build (windows-latest)") are required checks on main.
   build:
     strategy:
       fail-fast: false
@@ -24,4 +34,4 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-features
-      - run: cargo build --release
+      - run: cargo build --release --locked
