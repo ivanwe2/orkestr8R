@@ -83,6 +83,27 @@ pub struct CliIo {
     pub stderr: SharedWriter,
     /// A person at a real terminal (stdin and stdout both): the TUI and the pickers need one.
     pub terminal: bool,
+    /// Where `ork run -` reads its order.
+    pub stdin: Input,
+}
+
+/// What stdin is: the process's, a text (tests), or nothing.
+#[derive(Clone)]
+pub enum Input {
+    Process,
+    Text(std::sync::Arc<str>),
+    Nothing,
+}
+
+impl Input {
+    /// All of it.
+    pub fn read_all(&self) -> anyhow::Result<String> {
+        match self {
+            Input::Process => Ok(std::io::read_to_string(std::io::stdin())?),
+            Input::Text(text) => Ok(text.to_string()),
+            Input::Nothing => anyhow::bail!("there's no stdin to read"),
+        }
+    }
 }
 
 impl CliIo {
@@ -92,7 +113,14 @@ impl CliIo {
             stdout: SharedWriter::stdout(),
             stderr: SharedWriter::stderr(),
             terminal: std::io::stdout().is_terminal() && std::io::stdin().is_terminal(),
+            stdin: Input::Process,
         }
+    }
+
+    /// The same, reading `text` on stdin.
+    pub fn with_stdin(mut self, text: &str) -> Self {
+        self.stdin = Input::Text(text.into());
+        self
     }
 
     /// Writers into memory, plus handles to read stdout and stderr back (for tests).
@@ -104,6 +132,7 @@ impl CliIo {
                 stdout,
                 stderr,
                 terminal: false,
+                stdin: Input::Nothing,
             },
             out,
             err,

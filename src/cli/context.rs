@@ -7,7 +7,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
-use super::{CliIo, exit};
+use super::{CliIo, Input, exit};
 use crate::env::Env;
 use crate::events::{EventSink, HumanSink, JsonLinesSink, OrkEvent};
 use crate::io::SharedWriter;
@@ -24,6 +24,7 @@ pub struct CliContext {
     pub json: bool,
     /// A person at a real terminal (see `CliIo::terminal`).
     pub terminal: bool,
+    pub stdin: Input,
     pub events: Arc<dyn EventSink>,
 }
 
@@ -42,6 +43,7 @@ impl CliContext {
             cancel,
             json,
             terminal: io.terminal,
+            stdin: io.stdin.clone(),
             events,
         }
     }

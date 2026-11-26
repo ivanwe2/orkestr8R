@@ -119,3 +119,29 @@ async fn a_missing_file_exits_1_before_asking() {
     assert_eq!(out.stderr, "error: not found: nope.rs\n");
     assert!(server.requests().is_empty());
 }
+
+#[tokio::test]
+async fn paths_work_from_a_subdirectory_either_way() {
+    let server = FakeModelServer::start(Script::new().text("ok")).await;
+    let ws = Workspace::new(&server.base_url(), &[]);
+    ws.write("src/calc.rs", "pub fn one() -> i32 { 1 }\n");
+    let subdir = ws.repo.join("src");
+
+    // relative to where you are, and relative to the repo root: both found
+    let out = run_cli(
+        &["ask", "?", "--path", "calc.rs", "--path", "src/calc.rs"],
+        &subdir,
+        ws.env.clone(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::OK, "{}", out.stderr);
+    let user = server.requests()[0]["messages"][1]["content"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        user.contains("## calc.rs\n") && user.contains("## src/calc.rs\n"),
+        "{user}"
+    );
+}
