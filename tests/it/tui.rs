@@ -916,7 +916,7 @@ fn demo() -> (TempRepo, JobStore, DateTime<Utc>) {
             tokens_out: out,
             seconds: out as f64 / tps + 1.2,
             tokens_per_second: Some(tps),
-            cost: (server == "router").then(|| tokens_in as f64 * 0.000_000_3),
+            cost: (server == "router").then_some(tokens_in as f64 * 0.000_000_3),
         };
     let local = |turn: u32, tokens_in: u64, out: u64, tps: f64| {
         call(turn, "qwen3-coder", "box", tokens_in, out, tps)
