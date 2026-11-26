@@ -4,10 +4,15 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::orders::{JobStatus, Order, Report};
+
+/// How often `ork run` rewrites a job's heartbeat.
+pub const BEAT: std::time::Duration = std::time::Duration::from_secs(10);
+/// A running job whose heartbeat is older than this is reported as stopped: nine missed beats.
+pub const STALE_AFTER_SECONDS: i64 = 90;
 
 /// Characters for job ids: lower case and digits, without the ones that look alike (i l o 0 1).
 const ID_ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyz23456789";
@@ -62,6 +67,8 @@ pub struct JobPaths {
     pub events: PathBuf,
     pub transcript: PathBuf,
     pub report: PathBuf,
+    /// The time, rewritten every few seconds while `ork run` runs the job.
+    pub heartbeat: PathBuf,
 }
 
 /// The jobs of one repository.
@@ -92,6 +99,7 @@ impl JobStore {
             events: dir.join("events.jsonl"),
             transcript: dir.join("transcript.jsonl"),
             report: dir.join("report.json"),
+            heartbeat: dir.join("heartbeat"),
             dir,
         }
     }
@@ -123,7 +131,50 @@ impl JobStore {
             id,
         };
         write_atomic(&paths.state, &serde_json::to_vec_pretty(&state)?)?;
+        self.beat(&state.id)?;
         Ok(state)
+    }
+
+    /// Writes the time into the job's heartbeat: `ork run` does it every [`BEAT`] while it runs.
+    pub fn beat(&self, id: &str) -> anyhow::Result<()> {
+        write_atomic(
+            &self.paths(id).heartbeat,
+            Utc::now().to_rfc3339().as_bytes(),
+        )
+    }
+
+    fn last_beat(&self, id: &str) -> Option<DateTime<Utc>> {
+        let text = std::fs::read_to_string(self.paths(id).heartbeat).ok()?;
+        DateTime::parse_from_rfc3339(text.trim())
+            .ok()
+            .map(|t| t.with_timezone(&Utc))
+    }
+
+    /// A `running` job whose `ork run` stopped (killed, crashed, the machine went down) never says
+    /// so itself: it's known by its heartbeat going quiet. Reported as `error`, never written:
+    /// if the run is alive after all (a laptop waking up), its own final status still lands.
+    fn effective(&self, mut state: JobState, now: DateTime<Utc>) -> JobState {
+        if state.status != JobStatus::Running {
+            return state;
+        }
+        let quiet_since = match self.last_beat(&state.id) {
+            Some(beat) if now - beat > Duration::seconds(STALE_AFTER_SECONDS) => Some(beat),
+            Some(_) => None,
+            // No heartbeat: a job from before heartbeats, or a run that died at once.
+            None if now - state.created_at > Duration::seconds(STALE_AFTER_SECONDS) => {
+                Some(state.created_at)
+            }
+            None => None,
+        };
+        if let Some(since) = quiet_since {
+            state.status = JobStatus::Error;
+            state.reason = Some(format!(
+                "ork stopped: the process running this job is gone (no heartbeat since {}); ork discard {} cleans it up",
+                since.format("%Y-%m-%d %H:%M:%S UTC"),
+                state.id
+            ));
+        }
+        state
     }
 
     /// The job's state. Checked on the way in, because the id comes from the command line and the
@@ -131,6 +182,11 @@ impl JobStore {
     /// id (no `../`), and the file must describe that job, its branch `ork/<id>`, its worktree
     /// `.ork/worktrees/<id>` and a hex base sha (no `--option` slipped in for git).
     pub fn load(&self, id: &str) -> anyhow::Result<JobState> {
+        Ok(self.effective(self.load_raw(id)?, Utc::now()))
+    }
+
+    /// The state as the file says, a stopped run still `running`.
+    fn load_raw(&self, id: &str) -> anyhow::Result<JobState> {
         if !is_job_id(id) {
             bail!("{id:?} is not a job id (ork jobs lists them)");
         }
@@ -182,7 +238,8 @@ impl JobStore {
         status: JobStatus,
         reason: Option<String>,
     ) -> anyhow::Result<JobState> {
-        let mut state = self.load(id)?;
+        // The file's own state: a live run that looked stopped still gets to finish.
+        let mut state = self.load_raw(id)?;
         let now = Utc::now();
         let finishes = matches!(
             status,

@@ -376,3 +376,32 @@ async fn a_check_whose_program_is_missing_is_refused_before_the_run() {
     assert!(server.requests().is_empty(), "no model time spent");
     assert!(!ws.repo.join(".ork/jobs").exists(), "no job made");
 }
+
+#[tokio::test]
+async fn a_run_keeps_a_heartbeat() {
+    let server = FakeModelServer::start(
+        Script::new()
+            .tool_call("edit_file", add_sum())
+            .tool_call("finish", json!({ "summary": "Added Sum" })),
+    )
+    .await;
+    let ws = workspace(&server);
+
+    let out = run_cli(&run_args(&["--json"]), &ws.repo, ws.env.clone()).await;
+
+    assert_eq!(out.code, exit::OK, "{}", out.stderr);
+    let job = json_lines(&out.stdout)[0]["job"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let store = JobStore::new(&ws.repo);
+    let beat = std::fs::read_to_string(store.paths(&job).heartbeat).unwrap();
+    assert!(
+        chrono::DateTime::parse_from_rfc3339(beat.trim()).is_ok(),
+        "{beat}"
+    );
+    assert_eq!(
+        store.load(&job).unwrap().status,
+        orkestr8r::orders::JobStatus::Passed
+    );
+}
