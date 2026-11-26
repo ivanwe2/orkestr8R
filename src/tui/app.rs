@@ -15,7 +15,7 @@ use crate::config::OrkConfig;
 use crate::events::{EventLine, EventSink, HumanSink};
 use crate::io::SharedWriter;
 use crate::jobs::{JobState, JobStore};
-use crate::orders::JobStatus;
+use crate::orders::{JobStatus, OrderMode};
 use crate::skill::{Agent, Installed, Target};
 use crate::stats::{JobStats, Ledger, Place};
 use crate::tui::commands::{COMMANDS, Palette, Parsed};
@@ -77,6 +77,8 @@ pub struct JobView {
     pub max_repairs: u32,
     /// From the report, once there is one.
     pub report: Option<ReportView>,
+    /// A read-only order: its answer is the report; nothing to diff or apply.
+    pub readonly: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -267,6 +269,7 @@ struct Cached {
     stats: JobStats,
     lines: Vec<String>,
     limits: (u32, u32),
+    readonly: bool,
     report: Option<ReportView>,
 }
 
@@ -369,6 +372,7 @@ impl App {
                 max_turns: cached.limits.0,
                 max_repairs: cached.limits.1,
                 report: cached.report.clone(),
+                readonly: cached.readonly,
                 state,
             });
         }
@@ -402,20 +406,23 @@ impl App {
             .is_none_or(|cached| cached.events_len != events_len);
         if stale {
             let text = std::fs::read_to_string(&paths.events).unwrap_or_default();
-            let limits = self.store.load_order(&state.id).map_or(
-                (self.setup.max_turns, self.setup.max_repairs),
-                |order| {
-                    (
-                        order.max_turns.unwrap_or(self.setup.max_turns),
-                        order.max_repairs.unwrap_or(self.setup.max_repairs),
-                    )
-                },
-            );
+            let order = self.store.load_order(&state.id).ok();
+            let limits =
+                order
+                    .as_ref()
+                    .map_or((self.setup.max_turns, self.setup.max_repairs), |order| {
+                        (
+                            order.max_turns.unwrap_or(self.setup.max_turns),
+                            order.max_repairs.unwrap_or(self.setup.max_repairs),
+                        )
+                    });
+            let readonly = order.is_some_and(|order| order.mode == OrderMode::Readonly);
             let cached = Cached {
                 events_len,
                 stats: JobStats::from_log(&text),
                 lines: human_lines(&text),
                 limits,
+                readonly,
                 report: None,
             };
             self.cache.insert(state.id.clone(), cached);
@@ -674,7 +681,12 @@ impl App {
         let id = job.state.id.clone();
         let status = job.state.status;
         let gone = matches!(status, JobStatus::Applied | JobStatus::Discarded);
+        let readonly = job.readonly;
         match key {
+            JobKey::Diff | JobKey::Apply { .. } if readonly => self.say(
+                format!("{id} was read-only: it changed nothing; its answer is the summary (l for the transcript)"),
+                Tone::Info,
+            ),
             JobKey::Diff if gone => self.say(
                 format!("{id} was {}; its branch is gone", status.as_str()),
                 Tone::Info,

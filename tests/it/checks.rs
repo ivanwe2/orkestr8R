@@ -167,6 +167,13 @@ async fn the_work_is_committed_on_the_job_branch() {
             removed: 0
         }]
     );
+    // the counts: one tool call (finish isn't one); files_read is for read-only orders
+    assert_eq!(
+        (run.report.tool_calls, run.report.failed_tool_calls),
+        (1, 0)
+    );
+    assert!(run.report.files_read.is_empty());
+    assert!(run.report.duration_s >= 0.0);
     // the user's checkout is untouched
     assert_eq!(run.repo.read("src/calc.rs"), CALC);
 }
@@ -208,6 +215,7 @@ async fn no_repairs_means_the_first_failure_ends_it() {
 async fn a_readonly_order_answers_in_its_summary() {
     let script = Script::new()
         .tool_call("grep", json!({ "pattern": "fn " }))
+        .tool_call("read_file", json!({ "path": "src/calc.rs" }))
         .tool_call(
             "finish",
             json!({ "summary": "One function: one() in src/calc.rs:1." }),
@@ -227,6 +235,18 @@ async fn a_readonly_order_answers_in_its_summary() {
     // readonly orders aren't offered the writing tools
     let tools = run.server.requests()[0]["tools"].as_array().unwrap().len();
     assert_eq!(tools, 4);
+    // what it read, for the chief to judge how far it looked
+    assert_eq!(run.report.files_read, ["src/calc.rs"]);
+    assert_eq!(run.report.tool_calls, 2);
+    // nothing to apply: the worktree and the branch are gone, the report stays
+    assert!(!run.store.worktree_path(&run.job.id).exists());
+    assert!(
+        run.repo
+            .git(&["branch", "--list", &run.report.branch])
+            .trim()
+            .is_empty()
+    );
+    assert!(run.store.load_report(&run.job.id).unwrap().is_some());
 }
 
 #[tokio::test]

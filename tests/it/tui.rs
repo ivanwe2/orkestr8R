@@ -84,6 +84,10 @@ fn report(job: &str, status: JobStatus, files: usize) -> Report {
         checks: vec![],
         repairs_used: 0,
         turns: 2,
+        duration_s: 0.0,
+        tool_calls: 0,
+        failed_tool_calls: 0,
+        files_read: vec![],
         tokens: TokenCount {
             input: 1,
             output: 1,
@@ -1082,4 +1086,28 @@ fn shot(dir: &std::path::Path, name: &str, app: &App, width: u16, height: u16) {
     }
     html.push_str("</pre>");
     std::fs::write(dir.join(format!("{name}.html")), html).unwrap();
+}
+
+#[test]
+fn a_read_only_job_shows_as_answered_and_waits_on_no_one() {
+    let repo = TempRepo::new();
+    let store = JobStore::new(&repo.path);
+    let order = Order {
+        goal: "Which functions are untested?".into(),
+        mode: orkestr8r::orders::OrderMode::Readonly,
+        ..Default::default()
+    };
+    let id = store.create(&order, "abc123").unwrap().id;
+    store.set_status(&id, JobStatus::Passed, None).unwrap();
+    let mut app = App::new(store, setup(), ThemeName::Dark);
+    app.refresh(Utc::now());
+
+    assert!(app.selected_job().unwrap().readonly);
+    let s = screen(&app, 150, 40);
+    assert!(s.contains("ANSWERED"), "{s}");
+    assert!(!s.contains("YOUR TURN"), "nothing to review:\n{s}");
+    assert_eq!(app.on_key(key(KeyCode::Char('a'))), None);
+    assert!(app.message.as_ref().unwrap().text.contains("read-only"));
+    assert_eq!(app.on_key(key(KeyCode::Char('d'))), None);
+    assert!(app.confirm.is_none());
 }
