@@ -1,7 +1,7 @@
 //! `ork skill install AGENT…` and `ork skill list`: the Agent Skill, put where each agent reads
 //! it (see `crate::skill` for the places).
 
-use anyhow::bail;
+use anyhow::{Context, bail};
 use clap::builder::PossibleValuesParser;
 use clap::{Args, Subcommand};
 use serde_json::json;
@@ -9,6 +9,7 @@ use serde_json::json;
 use crate::cli::{CliContext, CommandResult};
 use crate::config;
 use crate::skill::{self, Agent, Scope, Target};
+use crate::tui::{self, theme::Theme};
 
 #[derive(Debug, Args)]
 pub struct SkillArgs {
@@ -27,7 +28,7 @@ pub enum SkillCommand {
 #[derive(Debug, Args)]
 pub struct InstallArgs {
     /// The agents: claude, opencode, codex, gemini, other (any agent that reads .agents/skills),
-    /// or all
+    /// or all. None, in a terminal: pick them from a list
     #[arg(value_parser = PossibleValuesParser::new(["claude", "opencode", "codex", "gemini", "other", "all"]))]
     pub agents: Vec<String>,
     /// Into this repo (to commit, for everyone's agent) instead of your own folders
@@ -44,7 +45,7 @@ pub struct ListArgs {
 
 pub async fn run(ctx: &CliContext, args: SkillArgs) -> anyhow::Result<CommandResult> {
     match args.command {
-        SkillCommand::Install(args) => install(ctx, args),
+        SkillCommand::Install(args) => install(ctx, args).await,
         SkillCommand::List(args) => list(ctx, args),
     }
 }
@@ -55,7 +56,7 @@ fn targets(ctx: &CliContext, repo: bool) -> anyhow::Result<Vec<Target>> {
     skill::targets(&ctx.env, &ctx.cwd, scope, root.as_deref())
 }
 
-fn install(ctx: &CliContext, args: InstallArgs) -> anyhow::Result<CommandResult> {
+async fn install(ctx: &CliContext, args: InstallArgs) -> anyhow::Result<CommandResult> {
     let targets = targets(ctx, args.repo)?;
     let wanted: Vec<Agent> = if args.agents.iter().any(|a| a == "all") {
         Agent::ALL.to_vec()
@@ -64,6 +65,23 @@ fn install(ctx: &CliContext, args: InstallArgs) -> anyhow::Result<CommandResult>
             .iter()
             .filter_map(|a| Agent::from_id(a))
             .collect()
+    };
+    // A person at a terminal picks from a list; scripts and agents name them.
+    let wanted = if wanted.is_empty() && ctx.terminal && !ctx.json {
+        let theme = Theme::new(super::tui::theme(ctx));
+        let shown = targets.clone();
+        let picked = tokio::task::spawn_blocking(move || tui::pick_agents(&shown, theme))
+            .await
+            .context("the picker stopped")??;
+        match picked {
+            Some(agents) => agents,
+            None => {
+                ctx.say("Nothing installed.");
+                return Ok(CommandResult::ok_with(json!({ "installed": [] })));
+            }
+        }
+    } else {
+        wanted
     };
     if wanted.is_empty() {
         let found: Vec<&str> = targets
@@ -98,7 +116,7 @@ fn install(ctx: &CliContext, args: InstallArgs) -> anyhow::Result<CommandResult>
             "change": change.as_str(),
         }));
     }
-    ctx.say("Start a new session of the agent so it reads the skill.");
+    ctx.say("Start a new session of the agent so it reads the skill. Run `ork` in your repo for the dashboard.");
     Ok(CommandResult::ok_with(json!({ "installed": done })))
 }
 

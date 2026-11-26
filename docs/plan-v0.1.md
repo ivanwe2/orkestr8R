@@ -41,6 +41,7 @@ task at a time and finish it without asking.
 - [x] T15 `ork guide`, the skill, the sync test, the README quickstart
 - [x] T17 `ork tui`, the live view (added before the release; see T17)
 - [x] T18 `ork skill install`: the skill for the agents you use (added before the release; see T18)
+- [x] T19 The TUI: `ork` alone, `/` commands, the agent picker, a bolder look (added before the release; see T19)
 - [ ] T16 Dogfood and release v0.1.0
 
 ```mermaid
@@ -201,7 +202,8 @@ src/
   runs.rs                  RunService
   stats.rs                 JobStats, Ledger, Place: the numbers in a job's events (T17)
   skill.rs                 the skill, compiled in; where each agent reads it; install (T18)
-  tui/       mod.rs (the loop, Ork), app.rs (state, keys), ui.rs (drawing), theme.rs (T17)
+  tui/       mod.rs (the loops, Ork), app.rs (state, keys), ui.rs (drawing), theme.rs (T17),
+             commands.rs (the / command line), picker.rs (the agent picker) (T19)
   cli/        mod.rs (clap types, run, the result wrapper), context.rs, exit.rs, guide.md,
               commands/ doctor.rs, models.rs, init.rs, ask.rs, run.rs, jobs.rs, guide.rs, tui.rs,
               skill.rs
@@ -1320,6 +1322,47 @@ named; the agents' variables move the folders; outdated → updated → unchange
 error with the ones found; `--repo` from a subfolder, and outside a repo; `list`.
 
 **Acceptance:** `cargo test --all-features --test it -- skill:: guide::`
+
+## T19 · The TUI: `ork` alone, `/` commands, the agent picker, a bolder look
+
+Added 2026-11-26, before the release. Ivan: run one command, pick the agents, keep `ork` open in
+that window and start the agent in another; the TUI "lacks some flair"; he wants slash commands.
+
+**Branch** `feat/tui-commands` · **Depends on** T17, T18 · **Who** frontier
+
+**Files:** `src/tui/commands.rs`, `src/tui/picker.rs`, `src/tui/` (`app.rs`, `ui.rs`, `mod.rs`,
+`theme.rs`), `src/cli/mod.rs`, `src/cli/context.rs`, `src/cli/commands/{tui,skill}.rs`,
+`tests/it/tui.rs`.
+
+**Details**
+- **`ork` alone**: the dashboard when a person is at a terminal (`CliIo::terminal`: stdin and
+  stdout are terminals; captured IO in tests never is), the help otherwise (exit 1, as before).
+- **First run**: when no agent has the skill, the dashboard opens on the agent picker. Agents
+  found on this machine start ticked; Space ticks, Enter runs `ork skill install` for the ticked
+  ones (nothing ticked: the one under the cursor), Esc skips. `/skill` opens it again.
+  `ork skill install` with no agents, in a terminal, shows the same picker inline (ratatui's
+  inline viewport), then prints what it installed.
+- **`/` commands**: a command line in place of the status bar, the matching commands in a box
+  above it. `/apply|squash|discard|diff|logs [job]` (an id or the start of one, else the selected
+  job; the same questions as the keys), `/skill`, `/doctor`, `/models`, `/guide` (their output in
+  the pager, doctor's even when a check failed), `/theme [dark|light]`, `/help` (also `?`),
+  `/quit`. Tab completes; Enter runs the name typed, else the highlighted one (`/ap` Enter is
+  `/apply`); Backspace on an empty line or Esc closes it. While it's open, letters are text.
+- **The look**: a solid header band (the topknot's grunts take turns while a job runs); panel
+  titles as solid tabs; each job's status as a solid pill (green running, amber passed, red failed,
+  quiet when applied or discarded); a status bar with the mode, the repo, the keys that fit, and
+  `/ commands  ? help`; the welcome with the wordmark in block letters and three steps (the skill,
+  start your agent, its jobs show up here). The selected row's colour goes under its cells, so the
+  pill keeps its own.
+- An ignored test (`tui::shots`, with `ORK_SHOTS=dir`) writes the screens as HTML with their
+  colours, to look at the design without a terminal.
+
+**Tests** (`tests/it/tui.rs`): the command line (suggestions, Enter, a job by id prefix, unknown
+names, Tab, Backspace, Esc, letters as text); the commands' actions and the help; doctor's output
+on failure; the picker (ticked by default, Space, Enter, Esc, nothing ticked); the welcome with and
+without the skill; small terminals; `ork` alone without a terminal.
+
+**Acceptance:** `cargo test --all-features --test it -- tui:: skill::`
 
 ## Risks
 

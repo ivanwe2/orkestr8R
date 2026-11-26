@@ -26,7 +26,8 @@ ork guide                                  the guide for AI agents (this file is
 ork skill install AGENT… [--repo]          install the skill for the agents you use: claude, opencode, codex, gemini, other, all
 ork skill list [--repo]                    each agent: on this machine?, the skill missing, current or outdated, its path
 ork tui                                    a live view for people: jobs, the models' tokens, speed and cost (local or cloud),
-                                           the turn-by-turn track; diff, logs, apply and discard on keys
+                                           the turn-by-turn track; diff, logs, apply and discard on keys; / commands
+ork                                        alone, in a terminal: the same as ork tui; anywhere else, the help (exit 1)
 ```
 
 In v0.1, `ork run` blocks until the job ends. An agent whose shell tool has a time limit starts it
@@ -34,9 +35,16 @@ in the background, reads the job id from the first line, and polls `ork status J
 `result` has the job's status (`running` until the run ends) and, once it has ended, the same
 report and exit code `ork run` gave.
 
-`ork tui` is the one command without `--json` (it refuses it): it's for people. It reads the same
-job files as `ork jobs` and `ork status`, and its actions run the same `diff`, `logs`, `apply` and
-`discard`.
+`ork tui` is the one command without `--json` (it refuses it): it's for people, and needs a terminal
+(stdin and stdout). `ork` alone opens it too. It reads the same job files as `ork jobs` and
+`ork status`, and its actions run the same commands as typed:
+
+- keys: `d` diff, `l` logs, `a`/`s` apply or squash, `x` discard (changes ask y/n first);
+- `/` opens a command line with suggestions: `/apply [job]`, `/squash`, `/discard`, `/diff`, `/logs`
+  (a job id or the start of one, else the selected job), `/skill`, `/doctor`, `/models`, `/guide`,
+  `/theme [dark|light]`, `/help`, `/quit`. Tab completes; Enter runs the highlighted one;
+- the first time, when no agent has the skill, it asks which agents you use and runs
+  `ork skill install` for the ones you pick (`/skill` asks again).
 
 ### Planned
 
@@ -168,8 +176,9 @@ writes it to `<dir>/orkestr8r/SKILL.md`, for the agents named and no others:
 
 `~` is `%USERPROFILE%` on Windows. With `--repo`, nothing below the repo root may be a link: a cloned
 `.claude/skills` that points into your home would otherwise get one of your files overwritten. Installing again updates an outdated copy (an older `ork`'s, or
-an edited one) and leaves a current one alone. Without agents it's an error that names the ones
-found on this machine (their program on PATH, or their config folder). `result.data`:
+an edited one) and leaves a current one alone. Without agents, a person at a terminal gets a
+picker (the agents found on this machine start ticked); anywhere else it's an error that names
+the ones found (their program on PATH, or their config folder). `result.data`:
 
 - install: `{"installed": [{"agent", "path", "change": "installed" | "updated" | "unchanged"}]}`;
 - list: `{"agents": [{"agent", "name", "found", "skill": "missing" | "current" | "outdated", "path"}]}`.

@@ -22,6 +22,8 @@ pub struct CliContext {
     pub cancel: CancellationToken,
     /// `--json`: events as JSON Lines on stdout, instead of human lines on stderr.
     pub json: bool,
+    /// A person at a real terminal (see `CliIo::terminal`).
+    pub terminal: bool,
     pub events: Arc<dyn EventSink>,
 }
 
@@ -39,6 +41,7 @@ impl CliContext {
             env,
             cancel,
             json,
+            terminal: io.terminal,
             events,
         }
     }
