@@ -4,6 +4,22 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
 
 ## 2026-11-26
 
+- **A TUI first, in v0.1: `ork tui`** (Ivan: "how about a TUI? can we squeeze that in?"). It reads
+  the job files, so it needs no daemon and fits v0.1; the web UI (#31) stays with `ork serve` in
+  v0.2.
+  - ratatui 0.30 (crossterm backend, the default features off). Windows Terminal and any Unix
+    terminal; `NO_COLOR` gets a plain theme.
+  - Its numbers come from `src/stats.rs` (pure: a job's events in, totals, a ledger per model and
+    the turn-by-turn track out), which the web UI will share.
+  - Its actions (`diff`, `logs`, `apply`, `discard`) run the CLI's own commands in-process, so the
+    rules (a clean checkout, `--force` for failed checks) live in one place. Changes ask y/n first.
+  - **Local or cloud** comes from the server's url: loopback, private, link-local and Tailscale
+    addresses, and `.local`/`.lan`/`.ts.net`/dotless names, are local; the rest is cloud.
+  - The look: localdub's control-room ideas (the status lamp, a big readout beside an LED speed
+    meter on a log scale, the timeline track, timecode clocks) in orkestr8R's palette.
+- **Events have times; calls have costs** (#32): `ts` is every event's second key, `call` carries
+  `cost` when the server reports `usage.cost` (OpenRouter does), and `state.json` has
+  `finished_at`. Additive to the `--json` contract.
 - **The web UI shows token and model stats for every model, local or cloud** (Ivan; #31): per
   job and per model, tokens in and out, seconds, tokens per second, and the server it ran on. It
   takes its cues from localdub's control-room UI but follows orkestr8R's own theme

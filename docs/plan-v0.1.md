@@ -39,6 +39,7 @@ task at a time and finish it without asking.
 - [x] T13 `ork run`
 - [x] T14 Job commands: `jobs`, `status`, `diff`, `logs`, `apply`, `discard`
 - [x] T15 `ork guide`, the skill, the sync test, the README quickstart
+- [x] T17 `ork tui`, the live view (added before the release; see T17)
 - [ ] T16 Dogfood and release v0.1.0
 
 ```mermaid
@@ -71,7 +72,7 @@ its shell and the skill.
 
 | Version | What | Milestones (docs/iteration-1.md) |
 |---|---|---|
-| **v0.1** | CLI, one blocking run at a time: `doctor`, `models`, `init`, `ask`, `run`, `jobs`, `status`, `diff`, `logs`, `apply`, `discard`, `guide`; the skill | M0 (without MCP), M1, M2, the guide and skill from M4 |
+| **v0.1** | CLI, one blocking run at a time: `doctor`, `models`, `init`, `ask`, `run`, `jobs`, `status`, `diff`, `logs`, `apply`, `discard`, `guide`, `tui`; the skill | M0 (without MCP), M1, M2, the guide and skill from M4 |
 | v0.2 | `ork mcp` (the official Rust SDK, `rmcp`), background jobs (`--detach`, `watch`), MCP Tasks, delegation rules written by `init` | M3, the rest of M4 |
 | v0.3 | the eval (10 tasks with and without), bubblewrap on Linux, polish | M5 |
 
@@ -197,14 +198,16 @@ src/
               (`grunt`, because `loop` is a keyword)
   checks.rs                CheckRunner
   runs.rs                  RunService
+  stats.rs                 JobStats, Ledger, Place: the numbers in a job's events (T17)
+  tui/       mod.rs (the loop, Ork), app.rs (state, keys), ui.rs (drawing), theme.rs (T17)
   cli/        mod.rs (clap types, run, the result wrapper), context.rs, exit.rs, guide.md,
-              commands/ doctor.rs, models.rs, init.rs, ask.rs, run.rs, jobs.rs, guide.rs
+              commands/ doctor.rs, models.rs, init.rs, ask.rs, run.rs, jobs.rs, guide.rs, tui.rs
   bin/ork-testtool.rs      sleep / print / exit / env, for the process tests
 tests/it/
   main.rs                  `mod support; mod output; mod config; …`
   support/    mod.rs, fake_server.rs (FakeModelServer, Script), temp_repo.rs, cli.rs (runs the CLI in-process)
   scaffold.rs, output.rs, config.rs, model.rs, doctor.rs, ask.rs, processes.rs, git.rs, tools.rs,
-  grunt.rs, checks.rs, run.rs, jobs.rs, guide.rs
+  grunt.rs, checks.rs, run.rs, jobs.rs, guide.rs, stats.rs, tui.rs
 skills/orkestr8r/SKILL.md
 ```
 
@@ -1233,6 +1236,57 @@ before a stop.
    - Publishing to crates.io is a separate decision.
 
 **Done:** the "v0.1 is done when" list at the top.
+
+## T17 · `ork tui`, the live view
+
+Added 2026-11-26, before the release: Ivan asked for a TUI ahead of the web UI (docs/decisions.md).
+
+**Branch** `feat/tui` · **Depends on** T14 and event times (#32) · **Who** frontier
+
+**Files:** `src/stats.rs`, `src/tui/` (`mod.rs`, `app.rs`, `ui.rs`, `theme.rs`),
+`src/cli/commands/tui.rs`, `tests/it/stats.rs`, `tests/it/tui.rs`.
+
+**Details**
+- **`stats`** (pure, shared with the web UI later):
+  - `JobStats::from_log(events.jsonl)`: turns, tools and their errors, checks, repairs, the
+    result, the first and last `ts`;
+  - per model and server (`ModelStats`): calls, tokens in and out, seconds, cost, and tokens per
+    second over the writing time (each call's output over the server's own speed figure), so long
+    replies weigh more;
+  - the track (`Mark`: a turn with its tools and failures, finish, a check, a repair) and the
+    prompt size of each request (the context);
+  - `Ledger`: many jobs added up by model; `Place::of_url`: local or cloud.
+  - A torn last line is skipped; lines without `ts` (older jobs) still count.
+- **The screen:**
+  - a header: the wordmark, the lamp (`● WORKING · n`, `◆ YOUR TURN · n` for jobs waiting on the
+    chief, `○ IDLE`), and the grunt with its server, place and context size;
+  - **JOBS**: id, status, age, files, goal, newest first; a spinner on running jobs;
+  - **MODELS**: the speed in big digits beside an LED meter (log scale, 1 to 300 tok/s): live from
+    the running job's last request, else the selected job's average. Then the ledger of every job:
+    model @ server, local or cloud, calls, tokens in and out, tok/s, cost;
+  - **the selected job**: status, turn n/max, repairs n/max and a timecode clock; branch, models,
+    tokens, speed, cost, files; `TRACK` (one glyph per step); `CONTEXT` (a sparkline of the prompt
+    sizes against the context window); the reason, summary and open questions; then the events, as
+    `ork run` prints them;
+  - a footer with the keys, or the last action's outcome.
+- **Keys:** ↑↓ (j k) pick a job; PgUp/PgDn scroll its events; `d`/Enter the diff and `l` the
+  transcript, in a pager; `a` apply, `s` squash, `x` discard; `t` dark/light; `r` refresh; `q`/Esc
+  quit (Ctrl+C anywhere).
+  - Apply and discard ask y/n first. Failed checks or gave up: apply means `--force`, and the
+    question says so. A running job can't be applied or discarded.
+- **Actions** run `ork diff|logs|apply|discard` in-process (`Ork::run`, through the runtime's
+  handle from the TUI's blocking thread), with their output captured.
+- The files are re-read every second, an events file only when it grew. The selection stays on its
+  job as new jobs arrive.
+- `ork tui --json` is an error (agents use `ork jobs --json` and `ork status JOB --json`), and so is
+  a stdout that isn't a terminal.
+
+**Tests** (`tests/it/stats.rs`, `tests/it/tui.rs`): the stats of a log; the ledger; places from urls;
+the screen drawn into ratatui's test backend (jobs, the readout, the ledger, the track, the
+context); the keys and their questions; the pager; small terminals; a real job through the runner
+(diff, apply).
+
+**Acceptance:** `cargo test --all-features --test it -- stats:: tui::`
 
 ## Risks
 

@@ -369,7 +369,7 @@ impl EventSink for HumanSink {
 }
 
 /// 212 → "212", 6120 → "6.1k", 1_250_000 → "1.2M".
-fn short_count(n: u64) -> String {
+pub fn short_count(n: u64) -> String {
     match n {
         0..=999 => n.to_string(),
         1_000..=999_999 => format!("{:.1}k", n as f64 / 1_000.0),

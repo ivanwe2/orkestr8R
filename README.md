@@ -114,8 +114,9 @@ runs `ork guide` for the details (`--json`, long runs, reading the report).
 | `ork diff JOB` · `ork logs JOB` | the changes; the whole conversation with the model |
 | `ork apply JOB` · `ork discard JOB` | merge it into your branch; drop it |
 | `ork guide` | the guide for AI agents |
+| `ork tui` | a live view: jobs, tokens, speed and cost per model (local or cloud); diff and apply on keys |
 
-Every command takes `--json`: one event per line on stdout, the last one always `result`; exit codes
+Every command but `ork tui` takes `--json`: one event per line on stdout, the last one always `result`; exit codes
 0 done, 1 error, 4 checks failed or gave up. The contract is [docs/cli.md](docs/cli.md).
 
 ## Safety, briefly

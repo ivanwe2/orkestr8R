@@ -42,7 +42,7 @@ async fn one_job(script: Script, extra: &[&str]) -> (Workspace, FakeModelServer,
     (ws, server, job)
 }
 
-async fn passing_job() -> (Workspace, FakeModelServer, String) {
+pub(crate) async fn passing_job() -> (Workspace, FakeModelServer, String) {
     one_job(
         Script::new()
             .tool_call("edit_file", add_sum())
