@@ -587,3 +587,22 @@ async fn status_tells_a_polling_agent_the_run_stopped() {
         "{result}"
     );
 }
+
+#[tokio::test]
+async fn job_commands_work_from_inside_a_jobs_worktree() {
+    let (ws, _server, job) = passing_job().await;
+    let inside = ws.repo.join(".ork/worktrees").join(&job);
+    assert!(inside.is_dir());
+
+    let out = run_cli(&["status", &job, "--json"], &inside, ws.env.clone()).await;
+    assert_eq!(out.code, exit::OK, "{}", out.stderr);
+    assert_eq!(json_lines(&out.stdout).last().unwrap()["status"], "passed");
+
+    let out = run_cli(&["jobs", "--json"], &inside, ws.env.clone()).await;
+    let jobs = json_lines(&out.stdout).last().unwrap()["data"]["jobs"].clone();
+    assert_eq!(jobs.as_array().unwrap().len(), 1, "{jobs}");
+    assert!(
+        !inside.join(".ork").exists(),
+        "no nested .ork/ in the worktree"
+    );
+}
