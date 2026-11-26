@@ -69,7 +69,8 @@ to `ork run - --json`: no quoting trouble with long goals (PowerShell), and no t
   Node repo's `npm run test` and `npm run lint`). No shell: no pipes, `&&` or redirects. Prefer narrow,
   fast checks (one test project, not the whole suite): they run after every attempt.
 - `--readonly` (`"mode": "readonly"`): an investigation. No writing tools; the answer comes back in
-  the summary. Checks are optional.
+  the summary, and `files_read` says what it looked at. Checks are optional. Its worktree is
+  removed when it ends: there's nothing to apply or discard.
 - Limits: `max_turns` 40, `max_repairs` 2, `max_minutes` 20 unless the config or the order says
   otherwise.
 
@@ -88,7 +89,8 @@ The `result` line carries the `report`:
 - `status`: `passed`, `failed_checks`, `gave_up` or `error`
 - `summary`: what the grunt says it did (the checks are what count)
 - `files_changed`, `checks` (each with its exit code and last lines), `repairs_used`, `turns`,
-  `tokens`
+  `tokens`, `duration_s` (wall time), `tool_calls` and `failed_tool_calls`; `files_read` for
+  read-only orders
 - `open_questions`: what the grunt needed to know; `reason`: why it stopped, when it didn't pass
 
 Read the report. Look at the diff only if the status isn't `passed`, or the change is risky.

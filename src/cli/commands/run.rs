@@ -130,7 +130,7 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
         }
     };
 
-    print_summary(ctx, &report);
+    print_summary(ctx, &report, order.mode == OrderMode::Readonly);
     let result = result_for(&report);
     file.emit(&result.clone().into_event());
     Ok(result)
@@ -206,7 +206,7 @@ fn result_for(report: &Report) -> CommandResult {
 }
 
 /// The report for people, on stdout (progress went to stderr as it happened).
-fn print_summary(ctx: &CliContext, report: &Report) {
+fn print_summary(ctx: &CliContext, report: &Report, readonly: bool) {
     let id = &report.job;
     ctx.say(&format!(
         "{} · {id} · {}",
@@ -235,7 +235,11 @@ fn print_summary(ctx: &CliContext, report: &Report) {
     for question in &report.open_questions {
         ctx.say(&format!("? {question}"));
     }
-    if report.status == JobStatus::Passed {
+    if readonly {
+        ctx.say(&format!(
+            "read-only: nothing to apply; its worktree is gone (ork logs {id} for the transcript)"
+        ));
+    } else if report.status == JobStatus::Passed {
         ctx.say(&format!(
             "next: ork diff {id} · ork apply {id} · ork discard {id}"
         ));

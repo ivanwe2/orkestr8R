@@ -39,6 +39,10 @@ fn report() -> Report {
         }],
         repairs_used: 1,
         turns: 11,
+        duration_s: 400.0,
+        tool_calls: 23,
+        failed_tool_calls: 2,
+        files_read: vec![],
         tokens: TokenCount {
             input: 61_234,
             output: 4_810,
@@ -328,7 +332,7 @@ fn human_lines_put_the_call_on_its_first_tool_line() {
         "  t1  read_file src/calc.rs   ok  3ms   6.1k→212 tok  52 t/s\n\
          \x20 ✗ cargo test  exit 101  14.2s\n\
          \x20 repair 1\n\
-         passed · 11 turns · 1 repair · 61.2k in / 4.8k out\n"
+         passed · 11 turns · 1 repair · 61.2k in / 4.8k out · 23 tool calls (2 failed) · 6m 40s\n"
     );
 }
 

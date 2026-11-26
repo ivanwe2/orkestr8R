@@ -18,6 +18,9 @@ use crate::text;
 /// One event. Internally tagged: serde writes `"event": "<variant>"` as the first key.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
+// `result` carries the whole report, so it's the big one. Events are made a few times a second
+// at most and serialized at once: boxing it would only make every match on it noisier.
+#[allow(clippy::large_enum_variant)]
 pub enum OrkEvent {
     /// The command started; for `run`: job, branch, worktree, role, model, server.
     Start {
@@ -205,7 +208,7 @@ impl EventSink for CompositeSink {
 /// ork run k7f2 · grunt qwen-27b on box · .ork/worktrees/k7f2
 ///   t1  read_file src/calc.rs   ok  3ms   6.1k→212 tok  52 t/s
 ///   ✗ cargo test  exit 101  14.2s
-/// passed · 11 turns · 1 repair · 61.2k in / 4.8k out
+/// passed · 11 turns · 1 repair · 61.2k in / 4.8k out · 23 tool calls · 6m 40s
 /// ```
 ///
 /// A `call` is held back and printed on the line of the first tool (or finish) of its turn.
@@ -349,12 +352,25 @@ impl EventSink for HumanSink {
                         1 => "1 repair".to_string(),
                         n => format!("{n} repairs"),
                     };
-                    Some(format!(
+                    let mut line = format!(
                         "{status} · {} turns · {repairs} · {} in / {} out",
                         report.turns,
                         short_count(report.tokens.input),
                         short_count(report.tokens.output)
-                    ))
+                    );
+                    if report.tool_calls > 0 {
+                        line += &match report.tool_calls {
+                            1 => " · 1 tool call".to_string(),
+                            n => format!(" · {n} tool calls"),
+                        };
+                        if report.failed_tool_calls > 0 {
+                            line += &format!(" ({} failed)", report.failed_tool_calls);
+                        }
+                    }
+                    if report.duration_s > 0.0 {
+                        line += &format!(" · {}", minutes(report.duration_s));
+                    }
+                    Some(line)
                 } else if status != "ok" {
                     Some(status.clone())
                 } else {
@@ -395,5 +411,15 @@ fn first_line(text: &str, max: usize) -> String {
         format!("{cut}…")
     } else {
         line.to_string()
+    }
+}
+
+/// 42.4 → "42s", 400 → "6m 40s".
+pub fn minutes(seconds: f64) -> String {
+    let s = seconds.max(0.0).round() as u64;
+    if s < 60 {
+        format!("{s}s")
+    } else {
+        format!("{}m {:02}s", s / 60, s % 60)
     }
 }

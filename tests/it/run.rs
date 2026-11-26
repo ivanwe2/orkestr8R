@@ -252,8 +252,7 @@ async fn people_get_progress_on_stderr_and_the_report_on_stdout() {
     );
     assert!(
         out.stderr
-            .trim_end()
-            .ends_with("passed · 2 turns · 0 repairs · 200 in / 40 out"),
+            .contains("passed · 2 turns · 0 repairs · 200 in / 40 out · 1 tool call"),
         "{}",
         out.stderr
     );
