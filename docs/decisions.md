@@ -4,6 +4,11 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
 
 ## 2026-11-26
 
+- **`ork` installs its own skill: `ork skill install AGENT`** (Ivan: copying the folder by hand
+  isn't elegant). The text is compiled in rather than downloaded, so it works offline and always
+  matches the binary. It goes only to the agents named (Claude Code, OpenCode, Codex, Gemini CLI,
+  or `other` for the shared `.agents/skills`), each in its own skills folder, for you or with
+  `--repo` for a repo. Codex's docs now name only `~/.agents/skills`, so that's where its copy goes.
 - **A TUI first, in v0.1: `ork tui`** (Ivan: "how about a TUI? can we squeeze that in?"). It reads
   the job files, so it needs no daemon and fits v0.1; the web UI (#31) stays with `ork serve` in
   v0.2.

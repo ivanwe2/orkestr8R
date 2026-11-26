@@ -16,6 +16,7 @@ pub mod model;
 pub mod orders;
 pub mod process;
 pub mod runs;
+pub mod skill;
 pub mod stats;
 pub mod text;
 pub mod tools;

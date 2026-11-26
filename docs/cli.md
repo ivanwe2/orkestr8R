@@ -23,6 +23,8 @@ ork logs JOB                               the transcript: every message to and 
 ork apply JOB [--squash] [--force]         merge the job's branch into the current branch, then clean up
 ork discard JOB                            drop the worktree and the branch
 ork guide                                  the guide for AI agents (this file is the one for people)
+ork skill install AGENT… [--repo]          install the skill for the agents you use: claude, opencode, codex, gemini, other, all
+ork skill list [--repo]                    each agent: on this machine?, the skill missing, current or outdated, its path
 ork tui                                    a live view for people: jobs, the models' tokens, speed and cost (local or cloud),
                                            the turn-by-turn track; diff, logs, apply and discard on keys
 ```
@@ -150,6 +152,23 @@ context on every turn.
 ## For agents: the skill
 
 `skills/orkestr8r/SKILL.md` says when to delegate (the rules in docs/iteration-1.md) and to run
-`ork guide` for the commands. Same shape as localdub's skill. Install it in Claude Code with
-`cp -r skills/orkestr8r ~/.claude/skills/`. A test checks that `ork guide`, the skill and this file
-name the same commands.
+`ork guide` for the commands. Same shape as localdub's skill. A test checks that `ork guide`, the
+skill and this file name the same commands.
+
+The skill is compiled into `ork`, so it always matches the binary. `ork skill install AGENT…`
+writes it to `<dir>/orkestr8r/SKILL.md`, for the agents named and no others:
+
+| Agent | id | For you | With `--repo` (commit it: everyone's agent gets it) |
+|---|---|---|---|
+| Claude Code | `claude` | `~/.claude/skills` (`$CLAUDE_CONFIG_DIR/skills`) | `.claude/skills` |
+| OpenCode | `opencode` | `~/.config/opencode/skills` (`$XDG_CONFIG_HOME/opencode/skills`) | `.opencode/skills` |
+| Codex | `codex` | `~/.agents/skills` | `.agents/skills` |
+| Gemini CLI | `gemini` | `~/.gemini/skills` | `.gemini/skills` |
+| any other | `other` | `~/.agents/skills`, the shared location | `.agents/skills` |
+
+`~` is `%USERPROFILE%` on Windows. Installing again updates an outdated copy (an older `ork`'s, or
+an edited one) and leaves a current one alone. Without agents it's an error that names the ones
+found on this machine (their program on PATH, or their config folder). `result.data`:
+
+- install: `{"installed": [{"agent", "path", "change": "installed" | "updated" | "unchanged"}]}`;
+- list: `{"agents": [{"agent", "name", "found", "skill": "missing" | "current" | "outdated", "path"}]}`.
