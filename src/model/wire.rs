@@ -107,6 +107,8 @@ pub struct ModelReply {
     pub tokens_out: u64,
     pub seconds: f64,
     pub tokens_per_second: Option<f64>,
+    /// `usage.cost` in US dollars, when the server reports it (OpenRouter does; llama.cpp doesn't).
+    pub cost: Option<f64>,
     /// Codes for what the client had to fix up: `think_stripped`, `tool_calls_in_content`.
     pub warnings: Vec<String>,
     /// The whole response body, for the transcript.

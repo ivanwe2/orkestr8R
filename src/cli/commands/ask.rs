@@ -67,6 +67,7 @@ pub async fn run(ctx: &CliContext, args: AskArgs) -> anyhow::Result<CommandResul
         tokens_out: reply.tokens_out,
         seconds: reply.seconds,
         tokens_per_second: reply.tokens_per_second,
+        cost: reply.cost,
     });
 
     let answer = reply.content.unwrap_or_default();

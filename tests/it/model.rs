@@ -180,6 +180,21 @@ async fn reasoning_content_stays_out_of_the_content() {
     assert_eq!(reply.to_message().content.as_deref(), Some("Hi"));
     // llama.cpp's own speed figure wins over our estimate
     assert_eq!(reply.tokens_per_second, Some(51.7));
+    assert_eq!(reply.cost, None, "a local server sends no cost");
+}
+
+#[tokio::test]
+async fn a_cost_in_the_usage_is_kept() {
+    // OpenRouter's shape: the price of the request, in US dollars, next to the token counts.
+    let body = json!({
+        "choices": [{ "message": { "role": "assistant", "content": "Hi" }, "finish_reason": "stop" }],
+        "usage": { "prompt_tokens": 1000, "completion_tokens": 20, "cost": 0.00042 }
+    });
+    let server = FakeModelServer::start(Script::new().raw(&body.to_string())).await;
+
+    let reply = server.client().chat(&request(false)).await.unwrap();
+
+    assert_eq!(reply.cost, Some(0.00042));
 }
 
 #[test]
