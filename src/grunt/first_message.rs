@@ -5,7 +5,6 @@ use crate::orders::{Order, OrderMode};
 use crate::text;
 use crate::tools::{ToolContext, list_dir};
 
-const TREE_DEPTH: usize = 2;
 const TREE_ENTRIES: usize = 200;
 const MAX_LINES_PER_FILE: usize = 400;
 const MAX_FILE_CHARS: usize = 40_000;
@@ -73,7 +72,7 @@ pub fn render(order: &Order, seed: &Seed) -> String {
     } else {
         out += &format!(
             "```\n{}\n```\n",
-            list_dir::render(&seed.files, TREE_DEPTH, TREE_ENTRIES)
+            list_dir::render_fit(&seed.files, TREE_ENTRIES)
         );
     }
 

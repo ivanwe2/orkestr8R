@@ -45,8 +45,8 @@ environment, not in the order, check, report loop. It hadn't run a write order y
 | `ork wait JOB… [--any] [--timeout]` | Fine; part of v0.2's background jobs. Claude Code's background shells already notify. | #27 |
 | A queue with per-server concurrency; stacked orders (`--base JOB`); overlap warnings | Agreed, after background jobs. | #51 |
 | Wall time and tool-call counts in the report; `files_read` for read-only | Yes, cheap. | done (#40) |
-| Tell the grunt to describe the code, not its comments; cite line numbers | Yes, a prompt change. | #44, v0.1.x |
-| A short file tree up front | It exists, but only two levels deep, which is why it guessed `Pages.ts`. Fill the 200-entry budget instead. | #43, v0.1.x |
+| Tell the grunt to describe the code, not its comments; cite line numbers | Yes, a prompt change. | done (#44) |
+| A short file tree up front | It exists, but only two levels deep, which is why it guessed `Pages.ts`. Fill the 200-entry budget instead. | done (#43) |
 | Clean up read-only jobs (or `ork gc`) | Yes: they show as YOUR TURN with nothing to apply. | done (#41): removed when they end, ANSWERED in the TUI |
 | The order on stdin (`ork run -`) | Yes: PowerShell quoting. | done (#42) |
 | `--events FILE` | Not needed: every job's events are already in `.ork/jobs/<id>/events.jsonl`, written line by line. `start` comes after the worktree exists by design. The guide should say so. | rejected |
