@@ -11,7 +11,7 @@ point.
 
 ## What orkestr8R is
 
-Two things in one tool:
+In one phrase: **a delegation harness**. Two things in one tool:
 
 1. **A harness.** orkestr8R's own agent loop (the *grunt*) runs on your local model: file and shell
    tools, limits, context handling, inside a git worktree. Ivan hasn't built a harness before; this

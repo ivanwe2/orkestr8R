@@ -17,7 +17,7 @@ they don't come back without it.
 | **A ranking of which model does which tasks at what level**, the "self-improving" part | Yes. The data mostly exists: every job records model, turns, repairs, checks, time, tokens, cost, and whether the chief applied or discarded the work. A scoreboard first, routing suggestions next, automatic routing last. It's the harness learning which model to trust with what (the models don't change). Needs volume (show n; nothing under ~10 jobs per cell), a task kind the chief sets on the order, and at least two models. Escalation stays a fixed rule (docs/swarm.md). | #50, v0.2 |
 | **Several endpoints for tasks** (OpenRouter, the local box, another Qwen), so the orchestrator delegates to many | Half there: the config holds several servers and roles; v0.1 always uses `grunt`. Needs a role or tier per order (the tiers in docs/swarm.md: goblin, grunt, mercenary) and background jobs to run them at once. | #49, v0.2 |
 | **Parallel execution** | Worth it, but one GPU splits its speed across jobs unless the server has parallel slots, so it's about scheduling: a queue with per-server limits, stacked orders, overlap warnings. | #51, after #27 |
-| **Is "harness" the right word?** ("harness delegator"?) | Open; see [Naming](#naming) below. | Ivan decides |
+| **Is "harness" the right word?** ("harness delegator"?) | Decided: "a delegation harness"; see [Naming](#naming) below. | done: README, vision, repo description |
 
 ### 2026-11-26
 
@@ -81,4 +81,5 @@ hands it orders; it picks the model, checks the result, reports back).
   checkable coding work, and it runs that work on your own models, in worktrees, checked by real
   commands."* The tagline stays: frontier plans · local executes.
 
-Open until Ivan decides; then README, vision and the repo description follow.
+**Decided 2026-11-27** (Ivan: "update the readme and description"): README, vision and the repo
+description say "a delegation harness".

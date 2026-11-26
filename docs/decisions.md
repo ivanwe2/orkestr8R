@@ -2,6 +2,16 @@
 
 Newest first. Each line: what was decided, and why. Open questions at the bottom.
 
+## 2026-11-27
+
+- **orkestr8R is "a delegation harness"** (Ivan asked whether "harness" fits): it's a harness (the
+  grunt's own loop) whose job is taking work handed down by your frontier agent; "harness" alone
+  reads as another Claude Code, "orchestrator" alone hides the harness. Reasoning in
+  docs/ideas.md (Naming).
+- **A repo's allowed commands come from the repo** (#39): its `ork.json`, else its build files
+  (a Node repo's test, lint and typecheck scripts with the lockfile's package manager, cargo, go,
+  dotnet, pytest), added to the user file's. The user file no longer gets one repo's commands.
+
 ## 2026-11-26
 
 - **`ork` alone opens the dashboard; it sets up the agents on its first run** (Ivan: one command,
