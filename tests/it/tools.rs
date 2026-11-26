@@ -759,3 +759,34 @@ fn normalize_line_ignores_colons_and_digits_in_the_matched_text() {
         r#"src/a.rs:7:let t = "10:30";"#
     );
 }
+
+#[test]
+fn the_first_messages_tree_goes_as_deep_as_fits() {
+    use orkestr8r::tools::list_dir::render_fit;
+
+    // A small repo: every level, so `Pages/index.ts` isn't guessed as `Pages.ts`.
+    let small: Vec<String> = [
+        "README.md",
+        "src/collections/Pages/index.ts",
+        "src/collections/Users/index.ts",
+        "src/payload.config.ts",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let tree = render_fit(&small, 200);
+    assert!(tree.contains("      index.ts"), "{tree}");
+    assert!(!tree.contains("files)"), "nothing cut:\n{tree}");
+
+    // A big one: as many levels as fit, deeper ones counted, never over the budget.
+    let big: Vec<String> = (0..40)
+        .flat_map(|d| (0..10).map(move |f| format!("src/mod{d}/deep/file{f}.rs")))
+        .collect();
+    let tree = render_fit(&big, 50);
+    assert!(tree.lines().count() <= 51, "{tree}");
+    assert!(tree.contains("mod0/"), "{tree}");
+    assert!(
+        tree.contains("files)"),
+        "deeper levels show a count:\n{tree}"
+    );
+}
