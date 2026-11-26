@@ -29,7 +29,9 @@ without asking.**
 - If the spec is wrong or unclear, fix the spec in the same PR and say so.
 
 Background: docs/iteration-1.md (milestones M0–M5). Decisions and open questions:
-docs/decisions.md. Keep both up to date when something is decided.
+docs/decisions.md. Keep both up to date when something is decided. Ideas not built yet, from Ivan,
+test sessions or the work: docs/ideas.md. When one comes up, add it there (and an issue if it's
+actionable) in the same session, so it isn't lost.
 
 ## Merge policy (configurable)
 

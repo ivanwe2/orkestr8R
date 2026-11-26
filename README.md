@@ -144,6 +144,7 @@ Details, and how to report a problem: [SECURITY.md](SECURITY.md).
 | [docs/swarm.md](docs/swarm.md) | where it goes next: tiers, plans, parallel grunts, verifiers, merge queue |
 | [docs/landscape.md](docs/landscape.md) | what already exists, what's current (Nov 2026), and what we take from it |
 | [docs/decisions.md](docs/decisions.md) | decisions so far, open questions |
+| [docs/ideas.md](docs/ideas.md) | every idea not built yet: where it came from, an assessment, its issue |
 | [docs/brand.md](docs/brand.md) | logo, colours, type |
 
 ## Stack
