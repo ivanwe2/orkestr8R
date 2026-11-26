@@ -334,7 +334,7 @@ async fn init_writes_the_repo_file_and_the_exclude_line_once() {
         json!({
             "servers": { "box": { "url": "http://box:9876/v1" } },
             "roles": { "grunt": { "server": "box", "model": "qwen" } },
-            "allow_commands": ["cargo build", "cargo test"]
+            "allow_commands": ["cargo build", "cargo test", "cargo clippy", "cargo fmt"]
         })
     );
     assert_eq!(exclude_lines(&setup.repo()), 1);
@@ -400,6 +400,10 @@ async fn init_user_writes_the_user_file() {
     let written: Value =
         serde_json::from_str(&fs::read_to_string(setup.user_file()).unwrap()).unwrap();
     assert_eq!(written["servers"]["box"]["key_env"], "LLAMA_API_KEY");
+    assert!(
+        written.get("allow_commands").is_none(),
+        "commands belong to a repo, not the user file: {written}"
+    );
     assert!(!setup.repo_file().exists());
     // and the key the user file names is the one that's used
     let loaded = config::load(&setup.repo(), &setup.env).unwrap();
@@ -427,4 +431,123 @@ async fn init_refuses_a_bad_url() {
     assert_eq!(out.code, exit::ERROR);
     assert!(out.stderr.contains("servers.box.url"), "{}", out.stderr);
     assert!(!setup.repo_file().exists());
+}
+
+/// The kc-commerce case: a Node repo with no ork.json of its own, and a user file that lists
+/// another repo's commands.
+fn node_repo(setup: &Setup, lockfile: &str) {
+    let scripts = json!({
+        "dev": "next dev",
+        "build": "next build",
+        "test": "pnpm run test:int && pnpm run test:e2e",
+        "test:int": "vitest run",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "typecheck": "tsc --noEmit",
+        "test:$(boom)": "echo no"
+    });
+    write_json(
+        &setup.repo().join("package.json"),
+        json!({ "name": "shop", "scripts": scripts }),
+    );
+    fs::write(setup.repo().join(lockfile), "").unwrap();
+}
+
+#[test]
+fn a_repo_without_its_own_list_gets_the_commands_its_build_files_imply() {
+    let setup = Setup::new();
+    let mut user = grunt_config("qwen");
+    user["allow_commands"] = json!(["cargo test"]);
+    write_json(&setup.user_file(), user);
+    node_repo(&setup, "package-lock.json");
+
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+
+    assert_eq!(
+        loaded.detected,
+        [
+            "npm test",
+            "npm run lint",
+            "npm run lint:fix",
+            "npm run test",
+            "npm run test:int",
+            "npm run typecheck"
+        ],
+        "the checks among the scripts; not dev, build, or an odd name"
+    );
+    assert_eq!(
+        loaded.config.allow_commands[0], "cargo test",
+        "the user's stay"
+    );
+    assert_eq!(loaded.config.allow_commands.len(), 7);
+}
+
+#[test]
+fn the_lockfile_names_the_package_manager() {
+    let setup = Setup::new();
+    node_repo(&setup, "pnpm-lock.yaml");
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+    assert!(
+        loaded.detected.contains(&"pnpm run test:int".to_string()),
+        "{:?}",
+        loaded.detected
+    );
+    assert!(loaded.detected.iter().all(|c| c.starts_with("pnpm ")));
+
+    let python = Setup::new();
+    fs::write(python.repo().join("pyproject.toml"), "[project]\n").unwrap();
+    let loaded = config::load(&python.repo(), &python.env).unwrap();
+    assert_eq!(loaded.detected, ["pytest", "python -m pytest"]);
+}
+
+#[test]
+fn a_repo_that_lists_its_commands_gets_exactly_those() {
+    let setup = Setup::new();
+    node_repo(&setup, "package-lock.json");
+    write_json(
+        &setup.repo_file(),
+        json!({ "allow_commands": ["npm run test:int"] }),
+    );
+
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+
+    assert!(loaded.detected.is_empty());
+    assert_eq!(loaded.config.allow_commands, ["npm run test:int"]);
+
+    // ORK_CONFIG is exact too.
+    let exact = setup.dir.path().join("exact.json");
+    write_json(&exact, json!({ "allow_commands": ["git status"] }));
+    let env = setup
+        .env
+        .clone()
+        .with("ORK_CONFIG", exact.display().to_string());
+    let loaded = config::load(&setup.repo(), &env).unwrap();
+    assert!(loaded.detected.is_empty());
+    assert_eq!(loaded.config.allow_commands, ["git status"]);
+}
+
+#[tokio::test]
+async fn doctor_says_which_commands_came_from_the_repo() {
+    let setup = Setup::new();
+    // cargo is on PATH wherever these tests run (npm may not be).
+    fs::write(
+        setup.repo().join("Cargo.toml"),
+        "[package]
+",
+    )
+    .unwrap();
+
+    let out = run_cli(&["doctor", "--json"], &setup.repo(), setup.env.clone()).await;
+
+    let result: Value = serde_json::from_str(out.stdout.lines().last().unwrap()).unwrap();
+    let commands = result["data"]["checks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|check| check["name"] == "commands")
+        .unwrap()
+        .clone();
+    let said = format!("{} {}", commands["detail"], commands["hint"]);
+    assert!(said.contains("cargo test"), "{said}");
+    assert!(said.contains("from this repo's build files"), "{said}");
 }

@@ -61,8 +61,9 @@ Or put the order in a file and run `ork run order.json --json` (flags override t
 - `context`: constraints, conventions, names to use. The grunt knows only the repo and this order.
 - `paths` (`--path`): files to show it up front, relative to the repo root. Saves it turns.
 - `write_scope` (`--scope`): globs of the files it may change. Every other write is refused.
-- `checks` (`--check`): commands that must exit 0. Each must be allowed by the repo's
-  `allow_commands` (`ork doctor` lists them). No shell: no pipes, `&&` or redirects. Prefer narrow,
+- `checks` (`--check`): commands that must exit 0. Each must be allowed (`ork doctor` lists the
+  commands: the repo's `ork.json` `allow_commands`, else the ones its build files imply, like a
+  Node repo's `npm run test` and `npm run lint`). No shell: no pipes, `&&` or redirects. Prefer narrow,
   fast checks (one test project, not the whole suite): they run after every attempt.
 - `--readonly` (`"mode": "readonly"`): an investigation. No writing tools; the answer comes back in
   the summary. Checks are optional.

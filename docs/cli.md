@@ -118,7 +118,11 @@ examples below leave `ts` out after the first two.
 
 - **Required:** `goal`; `checks` (at least one) and `write_scope`, unless `mode` is `readonly`.
 - The limits are optional; the config's defaults fill them in.
-- Every check must pass the command allow-list.
+- Every check must pass the command allow-list. A repo's `ork.json` that lists `allow_commands`
+  sets it (replacing the user file's). Otherwise it's the user file's plus the commands the repo's
+  build files imply (`config::detect_commands`: a Node repo's test, lint and
+  typecheck scripts with its package manager, `cargo test`, `go test`, `dotnet test`, `pytest`).
+  `ORK_CONFIG` is exact: nothing is added. `ork doctor` shows which commands came from the repo.
 - **`mode: readonly`** removes every writing tool. Use it for investigations ("find every place
   that…"): the answer comes back in the summary.
 - **Planned:** `approve` (v0.2), and `id`, `needs`, `tier` for plans (iteration 3, docs/swarm.md).
