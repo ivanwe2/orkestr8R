@@ -41,7 +41,8 @@ ork run --goal "Add pagination to GET /api/orders" \
   --json
 ```
 
-Or put the order in a file and run `ork run order.json --json` (flags override the file):
+Or put the order in a file and run `ork run order.json --json` (flags override the file), or pipe it
+to `ork run - --json`: no quoting trouble with long goals (PowerShell), and no temp file:
 
 ```json
 {
@@ -59,7 +60,9 @@ Or put the order in a file and run `ork run order.json --json` (flags override t
 
 - `goal`: one task, in plain words. Say what done looks like.
 - `context`: constraints, conventions, names to use. The grunt knows only the repo and this order.
-- `paths` (`--path`): files to show it up front, relative to the repo root. Saves it turns.
+- `paths` (`--path`): files to show it up front, relative to where you are or to the repo root
+  (stored relative to the root; in an order file, relative to the root). Saves it turns.
+  `--scope` globs are always relative to the repo root.
 - `write_scope` (`--scope`): globs of the files it may change. Every other write is refused.
 - `checks` (`--check`): commands that must exit 0. Each must be allowed (`ork doctor` lists the
   commands: the repo's `ork.json` `allow_commands`, else the ones its build files imply, like a
@@ -118,7 +121,8 @@ Read the report. Look at the diff only if the status isn't `passed`, or the chan
 - `ork doctor`: is everything in place (config, git, server, tool calling, allowed commands)? Run it
   when something looks off.
 - `ork models [--test]`: which model does each role, on which server; `--test` measures the speed.
-- `ork ask "QUESTION" --path FILE`: a quick read-only answer about files, with no tools and no
+- `ork ask "QUESTION" --path FILE`: a quick read-only answer about files (paths like `run`'s:
+  relative to where you are or to the repo root), with no tools and no
   worktree.
 - `ork guide`: this text.
 - `ork skill install AGENT`: install the orkestr8r skill (the short form of this guide) where an

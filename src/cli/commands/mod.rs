@@ -27,3 +27,21 @@ pub fn load_config(ctx: &CliContext) -> anyhow::Result<LoadedConfig> {
     }
     Ok(loaded)
 }
+
+/// A file path someone typed, relative to where they are (`cwd`), as a path relative to the repo
+/// root with `/` (what orders store). `None` when it isn't a file under `cwd`, or isn't inside the
+/// repo: the caller then takes it as relative to the root already.
+pub fn repo_relative(path: &str, cwd: &std::path::Path, root: &std::path::Path) -> Option<String> {
+    let file = dunce::canonicalize(cwd.join(path)).ok()?;
+    if !file.is_file() {
+        return None;
+    }
+    let root = dunce::canonicalize(root).ok()?;
+    let rel = file.strip_prefix(&root).ok()?;
+    Some(
+        rel.components()
+            .map(|part| part.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/"),
+    )
+}

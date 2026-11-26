@@ -13,7 +13,7 @@ ork init --url URL --model MODEL [--key-env VAR] [--context-tokens N] [--user] [
 ork doctor                                 is everything in place? (config, git, server, tool calling, allow-listed commands)
 ork models [--test]                        which model does each role, on which server; --test sends a tiny request
 ork ask "QUESTION" --path FILE [--path …]  a one-shot, read-only answer from the local model
-ork run [ORDER.json] [--goal "…"] [--context "…"] [--path FILE]… [--scope GLOB]… [--check "CMD"]…
+ork run [ORDER.json | -] [--goal "…"] [--context "…"] [--path FILE]… [--scope GLOB]… [--check "CMD"]…
         [--readonly] [--max-turns N] [--max-repairs N] [--max-minutes N]
                                            run one order: worktree, grunt loop, checks, report (flags override the file)
 ork jobs                                   every job, newest first
@@ -34,6 +34,10 @@ In v0.1, `ork run` blocks until the job ends. An agent whose shell tool has a ti
 in the background, reads the job id from the first line, and polls `ork status JOB --json`. Its
 `result` has the job's status (`running` until the run ends) and, once it has ended, the same
 report and exit code `ork run` gave.
+
+`ork run -` reads the order JSON from stdin (no quoting trouble with long goals). `--path`, for
+`run` and `ask`, is relative to where you are, else to the repo root; `run` stores it relative to
+the root. `--scope` globs and an order file's `paths` are always relative to the root.
 
 `ork tui` is the one command without `--json` (it refuses it): it's for people, and needs a terminal
 (stdin and stdout). `ork` alone opens it too. It reads the same job files as `ork jobs` and

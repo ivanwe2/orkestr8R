@@ -1,7 +1,7 @@
 //! `ork run`: one order, start to end. Validate it, make the job and its worktree, run the grunt
 //! loop with the checks, and report. Blocks until the job ends (background jobs are v0.2).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, bail};
@@ -19,7 +19,8 @@ use crate::runs::RunService;
 
 #[derive(Debug, Args)]
 pub struct RunArgs {
-    /// An order file (JSON, see docs/cli.md); the flags override its fields
+    /// An order file (JSON, see docs/cli.md), or - to read it from stdin; the flags override its
+    /// fields
     pub order: Option<PathBuf>,
     /// What to do
     #[arg(long)]
@@ -27,7 +28,8 @@ pub struct RunArgs {
     /// Constraints and conventions, in plain words
     #[arg(long)]
     pub context: Option<String>,
-    /// A file to show the grunt up front, relative to the repo root (repeat for more)
+    /// A file to show the grunt up front, relative to where you are or to the repo root (repeat
+    /// for more)
     #[arg(long = "path")]
     pub paths: Vec<String>,
     /// A glob of files the grunt may change, e.g. 'src/**' (repeat for more)
@@ -60,7 +62,7 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
     let (client, role) = ModelClient::for_role(config, "grunt", &ctx.env)?;
 
     // 2. The order: every problem at once.
-    let order = build_order(ctx, &args)?;
+    let order = build_order(ctx, &args, &root)?;
     let policy = CommandPolicy::new(&config.allow_commands);
     let mut problems = orders::validate(&order, &root, &policy);
     // A check that can't start would only show up after the whole run: find its program now,
@@ -146,8 +148,16 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
 }
 
 /// The order file (if any), with the flags on top.
-fn build_order(ctx: &CliContext, args: &RunArgs) -> anyhow::Result<Order> {
+fn build_order(ctx: &CliContext, args: &RunArgs, root: &Path) -> anyhow::Result<Order> {
     let mut order = match &args.order {
+        // PowerShell and long goals: an order on stdin needs no quoting and no temp file.
+        Some(path) if path.as_os_str() == "-" => {
+            let text = ctx
+                .stdin
+                .read_all()
+                .context("reading the order from stdin")?;
+            serde_json::from_str(&text).context("stdin is not a valid order")?
+        }
         Some(path) => {
             let path = ctx.cwd.join(path);
             let text = std::fs::read_to_string(&path)
@@ -164,7 +174,11 @@ fn build_order(ctx: &CliContext, args: &RunArgs) -> anyhow::Result<Order> {
         order.context = Some(context.clone());
     }
     if !args.paths.is_empty() {
-        order.paths = args.paths.clone();
+        order.paths = args
+            .paths
+            .iter()
+            .map(|path| super::repo_relative(path, &ctx.cwd, root).unwrap_or_else(|| path.clone()))
+            .collect();
     }
     if !args.scope.is_empty() {
         order.write_scope = args.scope.clone();
