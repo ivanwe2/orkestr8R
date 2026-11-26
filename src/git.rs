@@ -144,6 +144,19 @@ impl Git {
         Ok(())
     }
 
+    /// A worktree at `sha` with no branch: for a look at the base commit (and gone after).
+    pub async fn worktree_add_detached(
+        &self,
+        root: &Path,
+        path: &Path,
+        sha: &str,
+    ) -> anyhow::Result<()> {
+        let path = path.to_string_lossy();
+        self.run(root, &["worktree", "add", "-q", "--detach", &path, sha])
+            .await?;
+        Ok(())
+    }
+
     /// Stages everything and commits it, without the repo's hooks (this is ork's own commit on a job
     /// branch, not the user's). The new commit's sha, or `None` when nothing changed.
     pub async fn commit_all(&self, dir: &Path, message: &str) -> anyhow::Result<Option<String>> {

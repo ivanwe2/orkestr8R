@@ -63,7 +63,18 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
 
     // 2. The order: every problem at once.
     let order = build_order(ctx, &args, &root)?;
-    let problems = orders::validate(&order, &root, &CommandPolicy::new(&config.allow_commands));
+    let policy = CommandPolicy::new(&config.allow_commands);
+    let mut problems = orders::validate(&order, &root, &policy);
+    // A check that can't start would only show up after the whole run: find its program now,
+    // the way the run will (PATH, PATHEXT on Windows).
+    let runner = ProcessRunner::new(ctx.env.clone());
+    for check in &order.checks {
+        if let Ok(argv) = policy.check(check)
+            && crate::process::find(&argv[0], runner.env(), &root).is_none()
+        {
+            problems.push(format!("checks: {check}: `{}` isn't on PATH", argv[0]));
+        }
+    }
     if !problems.is_empty() {
         bail!("the order has problems:\n  {}", problems.join("\n  "));
     }
@@ -228,6 +239,11 @@ fn print_summary(ctx: &CliContext, report: &Report, readonly: bool) {
     for check in &report.checks {
         if check.exit == 0 {
             ctx.say(&format!("✓ {}", check.cmd));
+        } else if report.failing_before.contains(&check.cmd) {
+            ctx.say(&format!(
+                "✗ {}  exit {}  (fails on the base commit too)",
+                check.cmd, check.exit
+            ));
         } else {
             ctx.say(&format!("✗ {}  exit {}", check.cmd, check.exit));
         }

@@ -340,3 +340,39 @@ async fn path_flags_work_from_a_subdirectory() {
         "stored relative to the repo root"
     );
 }
+
+#[tokio::test]
+async fn a_check_whose_program_is_missing_is_refused_before_the_run() {
+    let server = FakeModelServer::start(Script::new()).await;
+    let ws = Workspace::new(&server.base_url(), &["git grep", "no-such-tool-xyz"]);
+    ws.write("src/calc.rs", CALC);
+    ws.commit("initial");
+
+    let out = run_cli(
+        &[
+            "run",
+            "--goal",
+            "Add Sum",
+            "--scope",
+            "src/**",
+            "--check",
+            "no-such-tool-xyz test",
+            "--json",
+        ],
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::ERROR);
+    let error = json_lines(&out.stdout).pop().unwrap()["error"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        error.contains("`no-such-tool-xyz` isn't on PATH"),
+        "{error}"
+    );
+    assert!(server.requests().is_empty(), "no model time spent");
+    assert!(!ws.repo.join(".ork/jobs").exists(), "no job made");
+}

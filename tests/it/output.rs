@@ -43,6 +43,7 @@ fn report() -> Report {
         tool_calls: 23,
         failed_tool_calls: 2,
         files_read: vec![],
+        failing_before: vec![],
         tokens: TokenCount {
             input: 61_234,
             output: 4_810,

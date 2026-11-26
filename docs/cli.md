@@ -127,6 +127,8 @@ examples below leave `ts` out after the first two.
   build files imply (`config::detect_commands`: a Node repo's test, lint and
   typecheck scripts with its package manager, `cargo test`, `go test`, `dotnet test`, `pytest`).
   `ORK_CONFIG` is exact: nothing is added. `ork doctor` shows which commands came from the repo.
+- A check whose program isn't on PATH (looked up the way the run will, with `PATHEXT` on Windows)
+  is a problem with the order: refused before any job or model request.
 - **`mode: readonly`** removes every writing tool. Use it for investigations ("find every place
   that…"): the answer comes back in the summary.
 - **Planned:** `approve` (v0.2), and `id`, `needs`, `tier` for plans (iteration 3, docs/swarm.md).
@@ -158,6 +160,9 @@ Aim for under ~400 tokens: this is what the chief reads instead of the work.
   count the grunt's tool calls (`finish` isn't one).
 - `files_read` (read-only orders only, left out when empty): the files the grunt read, each once,
   so the chief can judge how far it looked.
+- `failing_before` (left out when empty): when the checks failed, the failing one is run once more
+  on the base commit, in a throwaway worktree; it's listed here if it fails there too, so the
+  grunt didn't break it. A warning event (`already_failing`) says the same.
 - A read-only job's worktree and branch are removed when it ends: `ork apply` and `ork diff`
   refuse it (it changed nothing), and the TUI shows it as answered, not waiting on you.
 

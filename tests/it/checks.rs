@@ -300,3 +300,56 @@ async fn a_model_error_is_an_error_status() {
     assert_eq!(run.report.status, JobStatus::Error);
     assert!(run.report.reason.as_deref().unwrap().contains("401"));
 }
+
+#[tokio::test]
+async fn a_check_that_failed_before_the_job_is_said_so() {
+    // The grunt changes nothing; the check (`Sum` exists) fails on the base commit too.
+    let script = Script::new().tool_call("finish", json!({ "summary": "Done" }));
+    let order = Order {
+        max_repairs: Some(0),
+        ..order()
+    };
+
+    let run = run_job(script, order).await;
+
+    assert_eq!(run.report.status, JobStatus::FailedChecks);
+    assert_eq!(run.report.failing_before, [CHECK]);
+    assert!(
+        run.events.iter().any(|e| matches!(
+            e,
+            OrkEvent::Warning { code, .. } if code == "already_failing"
+        )),
+        "{:?}",
+        run.events
+    );
+    // the baseline's own check run isn't on the job's track, and its worktree is gone
+    assert_eq!(check_exits(&run.events), ["check 1"]);
+    assert!(
+        !run.repo
+            .path
+            .join(".ork/baseline")
+            .join(&run.job.id)
+            .exists()
+    );
+}
+
+#[tokio::test]
+async fn a_check_the_grunt_broke_isnt_blamed_on_the_base() {
+    // `one` is there on the base commit; the grunt renames it away.
+    let script = Script::new()
+        .tool_call(
+            "edit_file",
+            json!({ "path": "src/calc.rs", "old": "pub fn one()", "new": "pub fn two()" }),
+        )
+        .tool_call("finish", json!({ "summary": "Renamed" }));
+    let order = Order {
+        checks: vec!["git grep --untracked -q one -- src/calc.rs".into()],
+        max_repairs: Some(0),
+        ..order()
+    };
+
+    let run = run_job(script, order).await;
+
+    assert_eq!(run.report.status, JobStatus::FailedChecks);
+    assert!(run.report.failing_before.is_empty(), "{:?}", run.report);
+}

@@ -99,6 +99,42 @@ impl RunService<'_> {
             LoopEnd::Error => (JobStatus::Error, outcome.reason.clone()),
         };
 
+        // Failed checks: were they failing before the grunt touched anything? Run the failing one
+        // on the base commit, in a throwaway worktree. It costs time only when checks fail.
+        let mut failing_before = Vec::new();
+        if status == JobStatus::FailedChecks
+            && let Some(failure) = failure
+        {
+            let dir = store.root().join(".ork").join("baseline").join(&job.id);
+            let baseline = async {
+                git.worktree_add_detached(store.root(), &dir, &job.base_sha)
+                    .await?;
+                let run = judge
+                    .runner
+                    .run(std::slice::from_ref(&failure.cmd), &dir, &Quiet, &cancel)
+                    .await;
+                let _ = git.worktree_remove(store.root(), &dir).await;
+                run
+            };
+            match baseline.await {
+                Ok(run) if !run.passed() => {
+                    self.events.emit(&OrkEvent::Warning {
+                        code: "already_failing".into(),
+                        message: format!(
+                            "`{}` fails on the base commit too: the grunt didn't break it",
+                            failure.cmd
+                        ),
+                    });
+                    failing_before.push(failure.cmd.clone());
+                }
+                Ok(_) => {}
+                Err(err) => self.events.emit(&OrkEvent::Warning {
+                    code: "baseline_failed".into(),
+                    message: format!("couldn't run the check on the base commit: {err:#}"),
+                }),
+            }
+        }
+
         let stats = counted.stats.lock().map(|s| s.clone()).unwrap_or_default();
         let readonly = order.mode == OrderMode::Readonly;
         let seconds = (Utc::now() - job.created_at).num_milliseconds().max(0) as f64 / 1000.0;
@@ -119,6 +155,7 @@ impl RunService<'_> {
             } else {
                 Vec::new()
             },
+            failing_before,
             tokens: TokenCount {
                 input: outcome.tokens_in,
                 output: outcome.tokens_out,
@@ -147,6 +184,13 @@ impl RunService<'_> {
         }
         Ok(report)
     }
+}
+
+/// Drops every event: the baseline's check isn't part of the job's track.
+struct Quiet;
+
+impl EventSink for Quiet {
+    fn emit(&self, _event: &OrkEvent) {}
 }
 
 /// Passes the events on, and adds them up.

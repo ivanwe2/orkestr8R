@@ -95,8 +95,10 @@ The `result` line carries the `report`:
 
 Read the report. Look at the diff only if the status isn't `passed`, or the change is risky.
 
-- `failed_checks`: read the check's tail. A narrower order, more context or a better `--path` often
-  fixes it; or apply it anyway with `--force` and finish it yourself.
+- `failed_checks`: read the check's tail. If `failing_before` lists it, it fails on the base commit
+  too: the grunt didn't break it (fix the repo first, or pick another check). Otherwise a narrower
+  order, more context or a better `--path` often fixes it; or apply it anyway with `--force` and
+  finish it yourself.
 - `gave_up`: the reason says why. `no_tool_calls` or `malformed_tool_calls` usually means the model
   or its chat template (`ork doctor`); `max_turns` or `max_minutes` means the order was too big.
 - `error`: the run itself failed (server down, git trouble); the `error` field says what.
