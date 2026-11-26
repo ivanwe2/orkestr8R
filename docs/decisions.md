@@ -4,6 +4,13 @@ Newest first. Each line: what was decided, and why. Open questions at the bottom
 
 ## 2026-11-27
 
+- **v0.1.0 is released** with done-criterion 4 met in part: a fresh Claude Code session, given only
+  the skill, delegated with `ork run --json` and read the report (a read-only order); reviewing and
+  applying a write order wasn't done by a fresh session (Ivan ended that test). What dogfooding and
+  that test changed before the release: commands from the repo (#39), the report's counts and
+  read-only cleanup (#40, #41), orders on stdin (#42), the deeper tree and a code-reading prompt
+  (#43, #44), checks found before the run and tried on the base commit (#45), `--path` from where
+  you are (#46), stopped runs reported (#21), `ork` inside a worktree (#22).
 - **orkestr8R is "a delegation harness"** (Ivan asked whether "harness" fits): it's a harness (the
   grunt's own loop) whose job is taking work handed down by your frontier agent; "harness" alone
   reads as another Claude Code, "orchestrator" alone hides the harness. Reasoning in

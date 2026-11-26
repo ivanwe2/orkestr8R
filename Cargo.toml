@@ -1,6 +1,6 @@
 [package]
 name = "orkestr8r"
-version = "0.1.0-dev"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.99.1"
 description = "Frontier plans, local executes: run coding orders on your own models, in git worktrees, checked with real commands."
