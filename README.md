@@ -85,9 +85,11 @@ vLLM, LM Studio), and either Rust or a release binary.
    ork init --url http://localhost:8080/v1 --model <model name>
    ```
    That writes `ork.json` (the server, the grunt's model, and the build and test commands it may
-   run, detected from `Cargo.toml`, `go.mod`, `*.csproj` or `package.json`) and keeps `.ork/` out of
-   git. If the server needs an API key, put the server in your own config instead:
-   `ork init --user --url … --model … --key-env <VARIABLE>` (the key itself stays in that variable).
+   run, detected from `Cargo.toml`, `go.mod`, `*.csproj`, `package.json` scripts or `pyproject.toml`)
+   and keeps `.ork/` out of git. If the server needs an API key, put the server in your own config
+   instead: `ork init --user --url … --model … --key-env <VARIABLE>` (the key itself stays in that
+   variable). Then every repo works without its own `ork.json`: the commands come from its build
+   files.
 3. **Check.** `ork doctor`: all ✓ means the server answers, the model calls tools, and the allowed
    commands are on PATH.
 4. **Run an order.**

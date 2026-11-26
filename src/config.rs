@@ -87,6 +87,9 @@ pub struct LoadedConfig {
     /// Things people should know (commands emit them as `warning` events), e.g. an API key
     /// ignored because the repo's file changed its server.
     pub warnings: Vec<String>,
+    /// Commands found in the repo's build files and allowed because the repo's `ork.json` doesn't
+    /// list its own (they're in `config.allow_commands` too).
+    pub detected: Vec<String>,
 }
 
 /// Loads the config for a command run in `cwd`.
@@ -123,6 +126,7 @@ pub fn load(cwd: &Path, env: &Env) -> anyhow::Result<LoadedConfig> {
     // doesn't mention it, and the defaults fill whatever nobody set.
     let mut merged = Value::Object(Default::default());
     let mut trusted = Value::Object(Default::default());
+    let mut repo_lists_commands = false;
     for (file, is_trusted) in &files {
         let text =
             std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
@@ -130,6 +134,8 @@ pub fn load(cwd: &Path, env: &Env) -> anyhow::Result<LoadedConfig> {
             .with_context(|| format!("{} is not valid JSON", file.display()))?;
         if *is_trusted {
             merge(&mut trusted, value.clone());
+        } else {
+            repo_lists_commands = value.get("allow_commands").is_some();
         }
         merge(&mut merged, value);
     }
@@ -138,10 +144,27 @@ pub fn load(cwd: &Path, env: &Env) -> anyhow::Result<LoadedConfig> {
     let trusted: OrkConfig = serde_json::from_value(trusted).unwrap_or_default();
     let warnings = drop_untrusted_keys(&mut config, &trusted);
 
+    // The commands a repo needs come from the repo: its own ork.json when that lists them, else
+    // its build files (a Node repo's test and lint scripts, `cargo test`, …), added to the user
+    // file's. `ORK_CONFIG` is exact: nothing is added to it.
+    let mut detected = Vec::new();
+    if env.get("ORK_CONFIG").is_none()
+        && !repo_lists_commands
+        && let Some(root) = repo_root(cwd)
+    {
+        for command in detect_commands(&root) {
+            if !config.allow_commands.contains(&command) {
+                config.allow_commands.push(command.clone());
+                detected.push(command);
+            }
+        }
+    }
+
     Ok(LoadedConfig {
         config,
         sources: files.into_iter().map(|(path, _)| path).collect(),
         warnings,
+        detected,
     })
 }
 
@@ -199,6 +222,90 @@ pub fn user_path(env: &Env) -> Option<PathBuf> {
         PathBuf::from(env.get("HOME")?).join(".config")
     };
     Some(dir.join("orkestr8r").join("ork.json"))
+}
+
+/// The build and test commands a repo's build files at `dir` imply: what checks and the grunt
+/// need there. `ork init` writes them into the repo's `ork.json`; [`load`] adds them when the repo
+/// doesn't list its own.
+///
+/// - `Cargo.toml`: `cargo build|test|clippy|fmt`; `go.mod`: `go build|test|vet`;
+///   a `.sln`/`.slnx`/`.csproj`: `dotnet build|test`;
+/// - `package.json`: its test, lint, typecheck and check scripts, as `<pm> run <script>` (and
+///   `<pm> test`), with the package manager its lockfile names (pnpm, yarn, bun, else npm);
+/// - `pyproject.toml`, `setup.py` or `pytest.ini`: `pytest`, `python -m pytest`.
+pub fn detect_commands(dir: &Path) -> Vec<String> {
+    let has_file = |name: &str| dir.join(name).is_file();
+    let has_extension = |extensions: &[&str]| {
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|entry| {
+                entry.path().extension().is_some_and(|ext| {
+                    extensions
+                        .iter()
+                        .any(|wanted| ext.eq_ignore_ascii_case(wanted))
+                })
+            })
+    };
+
+    let mut commands: Vec<String> = Vec::new();
+    let mut add = |list: &[&str]| commands.extend(list.iter().map(|c| c.to_string()));
+    if has_file("Cargo.toml") {
+        add(&["cargo build", "cargo test", "cargo clippy", "cargo fmt"]);
+    }
+    if has_file("go.mod") {
+        add(&["go build", "go test", "go vet"]);
+    }
+    if has_extension(&["sln", "slnx", "csproj"]) {
+        add(&["dotnet build", "dotnet test"]);
+    }
+    if has_file("pyproject.toml") || has_file("setup.py") || has_file("pytest.ini") {
+        add(&["pytest", "python -m pytest"]);
+    }
+    if has_file("package.json") {
+        commands.extend(node_commands(dir));
+    }
+    commands
+}
+
+/// A Node repo's checks: the scripts that test, lint or type-check, run by its package manager.
+fn node_commands(dir: &Path) -> Vec<String> {
+    let pm = if dir.join("pnpm-lock.yaml").is_file() {
+        "pnpm"
+    } else if dir.join("yarn.lock").is_file() {
+        "yarn"
+    } else if dir.join("bun.lock").is_file() || dir.join("bun.lockb").is_file() {
+        "bun"
+    } else {
+        "npm"
+    };
+    let scripts: Vec<String> = std::fs::read_to_string(dir.join("package.json"))
+        .ok()
+        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+        .and_then(|json| json.get("scripts")?.as_object().cloned())
+        .map(|scripts| scripts.keys().cloned().collect())
+        .unwrap_or_default();
+    let checks = |name: &str| {
+        let stem = name.split(':').next().unwrap_or(name);
+        matches!(
+            stem,
+            "test" | "lint" | "typecheck" | "type-check" | "check-types" | "check"
+        ) || name == "format:check"
+    };
+    // Script names come from a cloned file: only plain ones (there's no shell, but still).
+    let plain = |name: &str| {
+        name.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '_' | '-' | '.'))
+    };
+    let mut commands = Vec::new();
+    if scripts.iter().any(|s| s == "test") {
+        commands.push(format!("{pm} test"));
+    }
+    for name in scripts.iter().filter(|s| checks(s) && plain(s)) {
+        commands.push(format!("{pm} run {name}"));
+    }
+    commands
 }
 
 /// The nearest directory, from `cwd` up, with a `.git` entry (a directory, or a file in a

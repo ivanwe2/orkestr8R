@@ -85,7 +85,11 @@ pub async fn run(ctx: &CliContext) -> anyhow::Result<CommandResult> {
         }
     }
     if let Ok(loaded) = &loaded {
-        checks.push(check_commands(ctx, &loaded.config.allow_commands));
+        checks.push(check_commands(
+            ctx,
+            &loaded.config.allow_commands,
+            &loaded.detected,
+        ));
     }
 
     for check in &checks {
@@ -255,19 +259,31 @@ async fn check_tool_calling(client: &ModelClient, temperature: f64, max_tokens: 
     }
 }
 
-fn check_commands(ctx: &CliContext, allow: &[String]) -> Check {
+fn check_commands(ctx: &CliContext, allow: &[String], detected: &[String]) -> Check {
     if allow.is_empty() {
         return Check::pass("commands", "none allowed").with_hint(
-            "orders need at least one check command; add allow_commands to ork.json (e.g. \"cargo test\")",
+            "orders need at least one check command: none found in this repo's build files; add allow_commands to its ork.json (e.g. \"npm test\")",
         );
     }
-    let missing: Vec<&str> = allow
+    let mut missing: Vec<&str> = Vec::new();
+    for program in allow
         .iter()
         .filter_map(|entry| entry.split_whitespace().next())
-        .filter(|program| process::find(program, &ctx.env, &ctx.cwd).is_none())
-        .collect();
+    {
+        if !missing.contains(&program) && process::find(program, &ctx.env, &ctx.cwd).is_none() {
+            missing.push(program);
+        }
+    }
     if missing.is_empty() {
-        Check::pass("commands", allow.join(", "))
+        let check = Check::pass("commands", allow.join(", "));
+        if detected.is_empty() {
+            check
+        } else {
+            check.with_hint(format!(
+                "from this repo's build files: {} (list allow_commands in its ork.json to choose)",
+                detected.join(", ")
+            ))
+        }
     } else {
         Check::fail(
             "commands",

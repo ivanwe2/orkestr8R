@@ -1,7 +1,5 @@
-//! `ork init`: writes `ork.json` with the server and the grunt's model, detects which build and
-//! test commands may run, and keeps `.ork/` out of git.
-
-use std::path::Path;
+//! `ork init`: writes `ork.json` with the server and the grunt's model. The repo's file also gets
+//! the build and test commands its build files imply, and `.ork/` is kept out of git.
 
 use anyhow::{Context, bail};
 use clap::Args;
@@ -56,13 +54,19 @@ pub async fn run(ctx: &CliContext, args: InitArgs) -> anyhow::Result<CommandResu
         bail!("{} exists; use --force to overwrite it", path.display());
     }
 
+    // The commands belong to a repo: the user file has none (each repo's come from its build
+    // files, or its own ork.json).
     let detect_in = root.as_deref().unwrap_or(&ctx.cwd);
-    let allow_commands = detect_commands(detect_in);
-    if allow_commands.is_empty() {
+    let allow_commands = if args.user {
+        Vec::new()
+    } else {
+        config::detect_commands(detect_in)
+    };
+    if allow_commands.is_empty() && !args.user {
         ctx.emit(OrkEvent::Warning {
             code: "no_allow_commands".into(),
             message: format!(
-                "found no Cargo.toml, go.mod, .sln/.csproj or package.json in {}; add allow_commands to {} by hand",
+                "found no build files (Cargo.toml, go.mod, .sln/.csproj, package.json scripts, pyproject.toml) in {}; add allow_commands to {} by hand",
                 detect_in.display(),
                 path.display()
             ),
@@ -77,11 +81,13 @@ pub async fn run(ctx: &CliContext, args: InitArgs) -> anyhow::Result<CommandResu
     if let Some(tokens) = args.context_tokens {
         grunt["context_tokens"] = json!(tokens);
     }
-    let file = json!({
+    let mut file = json!({
         "servers": { "box": server },
         "roles": { "grunt": grunt },
-        "allow_commands": allow_commands,
     });
+    if !args.user {
+        file["allow_commands"] = json!(allow_commands);
+    }
 
     // Catch a bad --url now rather than at the first `ork run`.
     let problems = serde_json::from_value::<OrkConfig>(file.clone())?.validate();
@@ -104,37 +110,4 @@ pub async fn run(ctx: &CliContext, args: InitArgs) -> anyhow::Result<CommandResu
     Ok(CommandResult::ok_with(
         json!({ "path": path.display().to_string() }),
     ))
-}
-
-/// The build and test commands to allow, from the build files at the top of `dir`.
-pub fn detect_commands(dir: &Path) -> Vec<String> {
-    let has_file = |name: &str| dir.join(name).is_file();
-    let has_extension = |extensions: &[&str]| {
-        std::fs::read_dir(dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .any(|entry| {
-                entry.path().extension().is_some_and(|ext| {
-                    extensions
-                        .iter()
-                        .any(|wanted| ext.eq_ignore_ascii_case(wanted))
-                })
-            })
-    };
-
-    let mut commands = Vec::new();
-    if has_file("Cargo.toml") {
-        commands.extend(["cargo build", "cargo test"]);
-    }
-    if has_file("go.mod") {
-        commands.extend(["go build", "go test"]);
-    }
-    if has_extension(&["sln", "slnx", "csproj"]) {
-        commands.extend(["dotnet build", "dotnet test"]);
-    }
-    if has_file("package.json") {
-        commands.extend(["npm test", "npm run lint"]);
-    }
-    commands.into_iter().map(String::from).collect()
 }
