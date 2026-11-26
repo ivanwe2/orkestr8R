@@ -84,3 +84,21 @@ pub fn render(files: &[String], depth: usize, max_entries: usize) -> String {
     }
     out
 }
+
+/// The tree of `files` as deep as fits in `max_entries` lines: a small repo shows everything, a
+/// big one as many levels as fit (deeper directories show a file count). The grunt's first message
+/// uses it, so it sees `src/collections/Pages/index.ts` instead of guessing `Pages.ts`.
+pub fn render_fit(files: &[String], max_entries: usize) -> String {
+    let deepest = files
+        .iter()
+        .map(|f| f.split('/').count())
+        .max()
+        .unwrap_or(1);
+    let lines = |depth: usize| render(files, depth, usize::MAX).lines().count();
+    // More levels never mean fewer lines: take the deepest that still fits.
+    let mut depth = 1;
+    while depth < deepest && lines(depth + 1) <= max_entries {
+        depth += 1;
+    }
+    render(files, depth, max_entries)
+}
