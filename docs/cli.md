@@ -33,7 +33,9 @@ ork                                        alone, in a terminal: the same as ork
 In v0.1, `ork run` blocks until the job ends. An agent whose shell tool has a time limit starts it
 in the background, reads the job id from the first line, and polls `ork status JOB --json`. Its
 `result` has the job's status (`running` until the run ends) and, once it has ended, the same
-report and exit code `ork run` gave.
+report and exit code `ork run` gave. A running job keeps a heartbeat (`.ork/jobs/<id>/heartbeat`, rewritten
+every 10 s); one quiet for 90 s is reported as `error`, reason `ork stopped: …`, by `status`, `jobs`
+and the TUI. That's computed, not written: if the run was only asleep, its final status still lands.
 
 `ork run -` reads the order JSON from stdin (no quoting trouble with long goals). `--path`, for
 `run` and `ask`, is relative to where you are, else to the repo root; `run` stores it relative to

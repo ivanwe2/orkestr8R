@@ -498,6 +498,96 @@ async fn a_read_only_job_cleans_up_after_itself_and_has_nothing_to_apply() {
     assert_eq!(code, exit::OK);
 }
 
+fn quiet_job(store: &JobStore) -> String {
+    let job = store
+        .create(
+            &Order {
+                goal: "Add Sum".into(),
+                ..Default::default()
+            },
+            "abc123",
+        )
+        .unwrap();
+    let five_minutes_ago = (chrono::Utc::now() - chrono::Duration::seconds(300)).to_rfc3339();
+    std::fs::write(store.paths(&job.id).heartbeat, five_minutes_ago).unwrap();
+    job.id
+}
+
+#[test]
+fn a_running_job_whose_heartbeat_went_quiet_is_reported_stopped() {
+    let repo = crate::support::temp_repo::TempRepo::new();
+    let store = JobStore::new(&repo.path);
+    let fresh = store
+        .create(
+            &Order {
+                goal: "Fresh".into(),
+                ..Default::default()
+            },
+            "abc123",
+        )
+        .unwrap();
+    assert_eq!(store.load(&fresh.id).unwrap().status, JobStatus::Running);
+
+    let id = quiet_job(&store);
+    let state = store.load(&id).unwrap();
+    assert_eq!(state.status, JobStatus::Error);
+    let reason = state.reason.unwrap();
+    assert!(
+        reason.contains("ork stopped") && reason.contains("ork discard"),
+        "{reason}"
+    );
+    assert!(
+        store
+            .list()
+            .unwrap()
+            .iter()
+            .any(|job| job.id == id && job.status == JobStatus::Error)
+    );
+
+    // Reported, never written: a run that looked stopped (a laptop waking up) still finishes.
+    let raw = std::fs::read_to_string(store.paths(&id).state).unwrap();
+    assert!(raw.contains("\"running\""), "{raw}");
+    store.set_status(&id, JobStatus::Passed, None).unwrap();
+    assert_eq!(store.load(&id).unwrap().status, JobStatus::Passed);
+}
+
+#[test]
+fn a_job_from_before_heartbeats_counts_from_its_start() {
+    let repo = crate::support::temp_repo::TempRepo::new();
+    let store = JobStore::new(&repo.path);
+    let id = quiet_job(&store);
+    std::fs::remove_file(store.paths(&id).heartbeat).unwrap();
+    let path = store.paths(&id).state;
+    let mut state: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    state["created_at"] = json!((chrono::Utc::now() - chrono::Duration::seconds(600)).to_rfc3339());
+    std::fs::write(&path, state.to_string()).unwrap();
+
+    assert_eq!(store.load(&id).unwrap().status, JobStatus::Error);
+}
+
+#[tokio::test]
+async fn status_tells_a_polling_agent_the_run_stopped() {
+    let server = FakeModelServer::start(Script::new()).await;
+    let ws = Workspace::new(&server.base_url(), &["git grep"]);
+    ws.write("src/calc.rs", CALC);
+    ws.commit("initial");
+    let id = quiet_job(&JobStore::new(&ws.repo));
+
+    let (code, events, _) = ork(&ws, &["status", &id]).await;
+
+    assert_eq!(code, exit::ERROR, "{events:?}");
+    let result = events.last().unwrap();
+    assert_eq!(result["status"], "error");
+    assert!(
+        result["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("ork stopped")
+            || result.to_string().contains("ork stopped"),
+        "{result}"
+    );
+}
+
 #[tokio::test]
 async fn job_commands_work_from_inside_a_jobs_worktree() {
     let (ws, _server, job) = passing_job().await;
