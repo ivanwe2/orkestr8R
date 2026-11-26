@@ -1,7 +1,8 @@
 use orkestr8r::cli::exit;
+use orkestr8r::jobs::JobStore;
 use serde_json::{Value, json};
 
-use crate::support::cli::run_cli;
+use crate::support::cli::{run_cli, run_cli_stdin};
 use crate::support::fake_server::{FakeModelServer, Script};
 use crate::support::workspace::{Workspace, json_lines};
 
@@ -272,5 +273,71 @@ async fn outside_a_repository_it_is_an_error() {
         out.stderr.contains("not inside a git repository"),
         "{}",
         out.stderr
+    );
+}
+
+#[tokio::test]
+async fn an_order_on_stdin_needs_no_quoting() {
+    let server = FakeModelServer::start(
+        Script::new()
+            .tool_call("edit_file", add_sum())
+            .tool_call("finish", json!({ "summary": "Added Sum" })),
+    )
+    .await;
+    let ws = workspace(&server);
+    let order = json!({
+        "goal": "Add Sum to src/calc.rs, \"quoted\", with $dollars and `backticks`",
+        "write_scope": ["src/**"],
+        "checks": [CHECK]
+    });
+
+    let out = run_cli_stdin(
+        &["run", "-", "--json"],
+        &ws.repo,
+        ws.env.clone(),
+        &order.to_string(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::OK, "{}\n{}", out.stdout, out.stderr);
+    assert_eq!(json_lines(&out.stdout).last().unwrap()["status"], "passed");
+
+    let bad = run_cli_stdin(&["run", "-", "--json"], &ws.repo, ws.env.clone(), "{ nope").await;
+    assert_eq!(bad.code, exit::ERROR);
+    let error = json_lines(&bad.stdout).pop().unwrap()["error"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(error.contains("stdin is not a valid order"), "{error}");
+}
+
+#[tokio::test]
+async fn path_flags_work_from_a_subdirectory() {
+    let server = FakeModelServer::start(
+        Script::new()
+            .tool_call("edit_file", add_sum())
+            .tool_call("finish", json!({ "summary": "Added Sum" })),
+    )
+    .await;
+    let ws = workspace(&server);
+    let subdir = ws.repo.join("src");
+
+    let out = run_cli(
+        &run_args(&["--path", "calc.rs", "--json"]),
+        &subdir,
+        ws.env.clone(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::OK, "{}\n{}", out.stdout, out.stderr);
+    let job = json_lines(&out.stdout)[0]["job"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let order = JobStore::new(&ws.repo).load_order(&job).unwrap();
+    assert_eq!(
+        order.paths,
+        ["src/calc.rs"],
+        "stored relative to the repo root"
     );
 }

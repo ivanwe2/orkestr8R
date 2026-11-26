@@ -26,3 +26,25 @@ pub async fn run_cli(args: &[&str], cwd: &Path, env: Env) -> CliOutput {
         stderr: stderr.text(),
     }
 }
+
+/// The same, with `stdin` on stdin.
+pub async fn run_cli_stdin(args: &[&str], cwd: &Path, env: Env, stdin: &str) -> CliOutput {
+    let (io, stdout, stderr) = CliIo::capture();
+    let argv = std::iter::once("ork")
+        .chain(args.iter().copied())
+        .map(String::from)
+        .collect();
+    let code = cli::run(
+        argv,
+        io.with_stdin(stdin),
+        cwd.to_path_buf(),
+        env,
+        CancellationToken::new(),
+    )
+    .await;
+    CliOutput {
+        code,
+        stdout: stdout.text(),
+        stderr: stderr.text(),
+    }
+}

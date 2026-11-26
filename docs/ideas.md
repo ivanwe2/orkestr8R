@@ -48,9 +48,9 @@ environment, not in the order, check, report loop. It hadn't run a write order y
 | Tell the grunt to describe the code, not its comments; cite line numbers | Yes, a prompt change. | #44, v0.1.x |
 | A short file tree up front | It exists, but only two levels deep, which is why it guessed `Pages.ts`. Fill the 200-entry budget instead. | #43, v0.1.x |
 | Clean up read-only jobs (or `ork gc`) | Yes: they show as YOUR TURN with nothing to apply. | #41, v0.1.x |
-| The order on stdin (`ork run -`) | Yes: PowerShell quoting. | #42, v0.1.x |
+| The order on stdin (`ork run -`) | Yes: PowerShell quoting. | done (#42) |
 | `--events FILE` | Not needed: every job's events are already in `.ork/jobs/<id>/events.jsonl`, written line by line. `start` comes after the worktree exists by design. The guide should say so. | rejected |
-| `ask` and `run` consistent: `--path` relative to the same place | Yes, both relative to where you are. (`data.answer` vs `report.summary` can stay: different commands.) | #46, v0.1.x |
+| `ask` and `run` consistent: `--path` relative to the same place | Yes, both relative to where you are. (`data.answer` vs `report.summary` can stay: different commands.) | done (#46) |
 
 ## Came up while building
 

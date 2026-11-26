@@ -9,6 +9,7 @@ use serde_json::json;
 
 use crate::cli::commands::load_config;
 use crate::cli::{CliContext, CommandResult};
+use crate::config;
 use crate::events::OrkEvent;
 use crate::model::{ChatRequest, ModelClient, WireMessage};
 use crate::text;
@@ -22,18 +23,30 @@ const MAX_TOTAL_CHARS: usize = 48_000;
 pub struct AskArgs {
     /// The question
     pub question: String,
-    /// A file to ask about, relative to the current directory (repeat for more)
+    /// A file to ask about, relative to where you are or to the repo root (repeat for more)
     #[arg(long = "path", required = true)]
     pub paths: Vec<PathBuf>,
 }
 
 pub async fn run(ctx: &CliContext, args: AskArgs) -> anyhow::Result<CommandResult> {
-    let missing: Vec<String> = args
-        .paths
-        .iter()
-        .filter(|path| !ctx.cwd.join(path).is_file())
-        .map(|path| path.display().to_string())
-        .collect();
+    // Like `ork run --path`: relative to where you are, else to the repo root.
+    let root = config::repo_root(&ctx.cwd);
+    let mut files = Vec::new();
+    let mut missing = Vec::new();
+    for path in &args.paths {
+        let here = ctx.cwd.join(path);
+        let found = if here.is_file() {
+            Some(here)
+        } else {
+            root.as_ref()
+                .map(|root| root.join(path))
+                .filter(|file| file.is_file())
+        };
+        match found {
+            Some(file) => files.push((path.display().to_string().replace('\\', "/"), file)),
+            None => missing.push(path.display().to_string()),
+        }
+    }
     if !missing.is_empty() {
         bail!("not found: {}", missing.join(", "));
     }
@@ -41,7 +54,7 @@ pub async fn run(ctx: &CliContext, args: AskArgs) -> anyhow::Result<CommandResul
     let loaded = load_config(ctx)?;
     let (client, role) = ModelClient::for_role(&loaded.config, "grunt", &ctx.env)?;
 
-    let (prompt, truncated) = render(ctx, &args)?;
+    let (prompt, truncated) = render(&args.question, &files)?;
     if !truncated.is_empty() {
         ctx.emit(OrkEvent::Warning {
             code: "truncated".into(),
@@ -83,18 +96,19 @@ pub async fn run(ctx: &CliContext, args: AskArgs) -> anyhow::Result<CommandResul
 
 /// The user message: the question, then each file with numbered lines, within the caps. Returns
 /// the files that were cut.
-fn render(ctx: &CliContext, args: &AskArgs) -> anyhow::Result<(String, Vec<String>)> {
-    let mut prompt = format!("{}\n", args.question);
+/// The question, then each file numbered under its name, cut to fit.
+fn render(question: &str, files: &[(String, PathBuf)]) -> anyhow::Result<(String, Vec<String>)> {
+    let mut prompt = format!("{question}\n");
     let mut truncated = Vec::new();
 
-    for path in &args.paths {
-        let name = path.display().to_string().replace('\\', "/");
+    for (name, file) in files {
+        let name = name.clone();
         let room = MAX_TOTAL_CHARS.saturating_sub(prompt.chars().count());
         if room == 0 {
             truncated.push(name);
             continue;
         }
-        let bytes = std::fs::read(ctx.cwd.join(path))?;
+        let bytes = std::fs::read(file)?;
         let content = String::from_utf8_lossy(&bytes);
         let (numbered, cut_lines) = text::numbered(&content, 1, MAX_LINES_PER_FILE);
         let (block, cut_chars) = text::cut(&numbered, room);
