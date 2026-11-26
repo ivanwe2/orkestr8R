@@ -8,6 +8,7 @@ pub mod init;
 pub mod jobs;
 pub mod models;
 pub mod run;
+pub mod skill;
 pub mod tui;
 
 use crate::cli::CliContext;

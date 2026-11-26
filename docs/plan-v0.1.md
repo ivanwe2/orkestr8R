@@ -40,6 +40,7 @@ task at a time and finish it without asking.
 - [x] T14 Job commands: `jobs`, `status`, `diff`, `logs`, `apply`, `discard`
 - [x] T15 `ork guide`, the skill, the sync test, the README quickstart
 - [x] T17 `ork tui`, the live view (added before the release; see T17)
+- [x] T18 `ork skill install`: the skill for the agents you use (added before the release; see T18)
 - [ ] T16 Dogfood and release v0.1.0
 
 ```mermaid
@@ -72,7 +73,7 @@ its shell and the skill.
 
 | Version | What | Milestones (docs/iteration-1.md) |
 |---|---|---|
-| **v0.1** | CLI, one blocking run at a time: `doctor`, `models`, `init`, `ask`, `run`, `jobs`, `status`, `diff`, `logs`, `apply`, `discard`, `guide`, `tui`; the skill | M0 (without MCP), M1, M2, the guide and skill from M4 |
+| **v0.1** | CLI, one blocking run at a time: `doctor`, `models`, `init`, `ask`, `run`, `jobs`, `status`, `diff`, `logs`, `apply`, `discard`, `guide`, `tui`, `skill`; the skill | M0 (without MCP), M1, M2, the guide and skill from M4 |
 | v0.2 | `ork mcp` (the official Rust SDK, `rmcp`), background jobs (`--detach`, `watch`), MCP Tasks, delegation rules written by `init` | M3, the rest of M4 |
 | v0.3 | the eval (10 tasks with and without), bubblewrap on Linux, polish | M5 |
 
@@ -199,15 +200,17 @@ src/
   checks.rs                CheckRunner
   runs.rs                  RunService
   stats.rs                 JobStats, Ledger, Place: the numbers in a job's events (T17)
+  skill.rs                 the skill, compiled in; where each agent reads it; install (T18)
   tui/       mod.rs (the loop, Ork), app.rs (state, keys), ui.rs (drawing), theme.rs (T17)
   cli/        mod.rs (clap types, run, the result wrapper), context.rs, exit.rs, guide.md,
-              commands/ doctor.rs, models.rs, init.rs, ask.rs, run.rs, jobs.rs, guide.rs, tui.rs
+              commands/ doctor.rs, models.rs, init.rs, ask.rs, run.rs, jobs.rs, guide.rs, tui.rs,
+              skill.rs
   bin/ork-testtool.rs      sleep / print / exit / env, for the process tests
 tests/it/
   main.rs                  `mod support; mod output; mod config; …`
   support/    mod.rs, fake_server.rs (FakeModelServer, Script), temp_repo.rs, cli.rs (runs the CLI in-process)
   scaffold.rs, output.rs, config.rs, model.rs, doctor.rs, ask.rs, processes.rs, git.rs, tools.rs,
-  grunt.rs, checks.rs, run.rs, jobs.rs, guide.rs, stats.rs, tui.rs
+  grunt.rs, checks.rs, run.rs, jobs.rs, guide.rs, stats.rs, tui.rs, skill.rs
 skills/orkestr8r/SKILL.md
 ```
 
@@ -1225,7 +1228,7 @@ before a stop.
    - Log each in `docs/dogfood/v0.1.md`: the order, status, turns, repairs, minutes, tokens and
      tokens per second, and what went wrong.
    - Tune `prompts::GRUNT_SYSTEM` and the limits from what you see.
-6. **Claude Code:** `cp -r skills/orkestr8r ~/.claude/skills/`, then ask it to delegate one task.
+6. **Claude Code:** `ork skill install claude`, then, in a new session, ask it to do one task.
    Record whether it delegated without being told how.
 7. **Release:**
    - set `version = "0.1.0"`;
@@ -1287,6 +1290,36 @@ context); the keys and their questions; the pager; small terminals; a real job t
 (diff, apply).
 
 **Acceptance:** `cargo test --all-features --test it -- stats:: tui::`
+
+## T18 · `ork skill install`: the skill for the agents you use
+
+Added 2026-11-26, before the release. Ivan: copying `skills/orkestr8r` by hand isn't elegant (and
+his first try failed); `ork` should put it in place, for the agents he picks.
+
+**Branch** `feat/skill-install` · **Depends on** T15 · **Who** frontier
+
+**Files:** `src/skill.rs`, `src/cli/commands/skill.rs`, `tests/it/skill.rs`.
+
+**Details**
+- The skill's text is compiled in (`include_str!` of `skills/orkestr8r/SKILL.md`), so nothing is
+  downloaded and it always matches the binary.
+- `Agent`: Claude Code, OpenCode, Codex, Gemini CLI, and `other` (the shared `.agents/skills`). Each
+  has a folder for you and one for a repo (the table in docs/cli.md). Codex reads only
+  `.agents/skills`; OpenCode also reads `~/.claude/skills` and `~/.agents/skills` (the same text,
+  so a second copy does no harm).
+- "Found on this machine": the agent's program on PATH, or its config folder (`~/.claude`,
+  `~/.config/opencode`, `~/.codex`, `~/.gemini`, or their variables).
+- `ork skill install AGENT… [--repo]` installs for the agents named and no others; again, it
+  updates an outdated copy and leaves a current one alone. With none named, an error that names
+  the ones found. `ork skill list [--repo]`: every agent, found or not, the skill missing, current
+  or outdated, and the path.
+- T19 adds the picker for people (no agents named, in a terminal).
+
+**Tests** (`tests/it/skill.rs`): the file lands where each agent reads it, and only for the agents
+named; the agents' variables move the folders; outdated → updated → unchanged; no agents → the
+error with the ones found; `--repo` from a subfolder, and outside a repo; `list`.
+
+**Acceptance:** `cargo test --all-features --test it -- skill:: guide::`
 
 ## Risks
 

@@ -116,6 +116,9 @@ Read the report. Look at the diff only if the status isn't `passed`, or the chan
 - `ork ask "QUESTION" --path FILE`: a quick read-only answer about files, with no tools and no
   worktree.
 - `ork guide`: this text.
+- `ork skill install AGENT`: install the orkestr8r skill (the short form of this guide) where an
+  agent reads it: claude, opencode, codex, gemini, other. `ork skill list` shows where it is.
+  People do this once; you don't need to.
 
 ## Exit codes
 

@@ -64,6 +64,8 @@ pub enum Commands {
     Discard(commands::jobs::JobArg),
     /// The guide for AI agents: when to delegate, the order, reading the report
     Guide,
+    /// The skill that teaches your agent to delegate: install it for Claude Code, OpenCode, …
+    Skill(commands::skill::SkillArgs),
     /// A live view of the jobs and the models, for people: tokens, speed, cost; diff, apply
     Tui,
 }
@@ -123,6 +125,7 @@ pub async fn run(
         Commands::Apply(args) => complete(&ctx, commands::jobs::apply(&ctx, args)).await,
         Commands::Discard(args) => complete(&ctx, commands::jobs::discard(&ctx, args)).await,
         Commands::Guide => complete(&ctx, commands::guide::run(&ctx)).await,
+        Commands::Skill(args) => complete(&ctx, commands::skill::run(&ctx, args)).await,
         Commands::Tui => complete(&ctx, commands::tui::run(&ctx)).await,
     }
 }

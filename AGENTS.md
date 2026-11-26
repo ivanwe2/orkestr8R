@@ -64,7 +64,7 @@ Ivan sets the value above. It decides who merges a PR into `main`:
 | `src/cli/` | `ork`: every command, `--json` events; `ork mcp` (the MCP server over stdio) from v0.2 |
 | `src/tui/` | `ork tui`: the live view for people (ratatui); its numbers come from `src/stats.rs`, which the web UI will share |
 | `tests/it/` | one integration-test binary: unit-level tests, and end-to-end runs of the loop against a fake model server; `ork-testtool` (feature `testtool`) for process tests |
-| `skills/orkestr8r/SKILL.md` | the Agent Skill that points agents to `ork guide` |
+| `skills/orkestr8r/SKILL.md` | the Agent Skill that points agents to `ork guide`; compiled into `ork`, which installs it (`ork skill install`) |
 | `scripts/` | `dcargo.sh` (cargo in Docker), `build-windows.sh` (a native `ork.exe` without MSVC) |
 | `.github/` | CI, the release workflow (on `v*` tags), Dependabot, issue and PR templates |
 | `docs/` | the plan and the contracts |
