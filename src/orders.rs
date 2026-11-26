@@ -143,6 +143,17 @@ pub struct Report {
     pub checks: Vec<CheckResult>,
     pub repairs_used: u32,
     pub turns: u32,
+    /// Wall time, from the job's start to its report, in seconds.
+    #[serde(default)]
+    pub duration_s: f64,
+    /// Tool calls, `finish` not counted, and how many of them failed.
+    #[serde(default)]
+    pub tool_calls: u32,
+    #[serde(default)]
+    pub failed_tool_calls: u32,
+    /// Read-only orders: the files the grunt read, so the chief can judge how far it looked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub files_read: Vec<String>,
     pub tokens: TokenCount,
     pub model: String,
     pub branch: String,

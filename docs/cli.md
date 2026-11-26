@@ -140,12 +140,22 @@ Aim for under ~400 tokens: this is what the chief reads instead of the work.
   "checks": [{ "cmd": "dotnet test tests/Orders", "exit": 0, "tail": "Passed: 18" }],
   "repairs_used": 1,
   "turns": 11,
+  "duration_s": 402.5,
+  "tool_calls": 23,
+  "failed_tool_calls": 2,
   "tokens": { "in": 61234, "out": 4810 },
   "model": "qwen-27b",
   "branch": "ork/k7f2",
   "open_questions": []
 }
 ```
+
+- `duration_s`: wall time from the job's start to its report. `tool_calls` and `failed_tool_calls`
+  count the grunt's tool calls (`finish` isn't one).
+- `files_read` (read-only orders only, left out when empty): the files the grunt read, each once,
+  so the chief can judge how far it looked.
+- A read-only job's worktree and branch are removed when it ends: `ork apply` and `ork diff`
+  refuse it (it changed nothing), and the TUI shows it as answered, not waiting on you.
 
 ## MCP tools
 

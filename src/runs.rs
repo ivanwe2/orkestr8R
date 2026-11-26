@@ -2,20 +2,23 @@
 //! `finish`, a commit of whatever came of it, and the report.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::Duration;
 
+use chrono::Utc;
 use tokio_util::sync::CancellationToken;
 
 use crate::checks::{CheckRun, CheckRunner};
 use crate::config::{OrkConfig, RoleConfig};
 use crate::env::Env;
-use crate::events::{EventSink, OrkEvent};
+use crate::events::{EventLine, EventSink, OrkEvent};
 use crate::grunt::{
     FinishCall, FinishHandler, FinishVerdict, GruntLoop, LoopEnd, LoopSettings, Transcript,
 };
 use crate::jobs::{JobState, JobStore};
 use crate::model::ModelClient;
-use crate::orders::{JobStatus, Order, Report, TokenCount};
+use crate::orders::{JobStatus, Order, OrderMode, Report, TokenCount};
+use crate::stats::JobStats;
 use crate::text;
 use crate::tools::{ToolContext, ToolRegistry};
 
@@ -38,6 +41,12 @@ impl RunService<'_> {
         cancel: CancellationToken,
     ) -> anyhow::Result<Report> {
         let worktree = store.worktree_path(&job.id);
+        // The report's counts (tool calls, files read) come from the events as they pass.
+        let counted = Counted {
+            inner: self.events,
+            stats: Mutex::new(JobStats::default()),
+        };
+        let events: &dyn EventSink = &counted;
         let ctx = ToolContext::new(&worktree, order, self.config, self.env, cancel.clone())?;
         let checks = CheckRunner::new(
             ctx.policy.clone(),
@@ -48,7 +57,7 @@ impl RunService<'_> {
             checks: &order.checks,
             runner: checks,
             root: ctx.root.clone(),
-            events: self.events,
+            events,
             cancel: cancel.clone(),
             max_repairs: order
                 .max_repairs
@@ -60,7 +69,7 @@ impl RunService<'_> {
         let settings = LoopSettings::new(order, self.config, self.role);
         let transcript = Transcript::new(store.paths(&job.id).transcript);
         let tools = ToolRegistry::for_mode(order.mode);
-        let mut grunt = GruntLoop::new(self.model, tools, self.events, transcript, settings);
+        let mut grunt = GruntLoop::new(self.model, tools, events, transcript, settings);
         let outcome = grunt.run(order, &ctx, &mut judge).await;
 
         // Whatever came of it, keep it on the job branch, so failed work can be inspected too.
@@ -90,6 +99,10 @@ impl RunService<'_> {
             LoopEnd::Error => (JobStatus::Error, outcome.reason.clone()),
         };
 
+        let stats = counted.stats.lock().map(|s| s.clone()).unwrap_or_default();
+        let readonly = order.mode == OrderMode::Readonly;
+        let seconds = (Utc::now() - job.created_at).num_milliseconds().max(0) as f64 / 1000.0;
+
         let report = Report {
             job: job.id.clone(),
             status,
@@ -98,6 +111,14 @@ impl RunService<'_> {
             checks: judge.last.map(|run| run.results).unwrap_or_default(),
             repairs_used: judge.repairs_used,
             turns: outcome.turns,
+            duration_s: (seconds * 10.0).round() / 10.0,
+            tool_calls: stats.tools,
+            failed_tool_calls: stats.tool_errors,
+            files_read: if readonly {
+                stats.files_read
+            } else {
+                Vec::new()
+            },
             tokens: TokenCount {
                 input: outcome.tokens_in,
                 output: outcome.tokens_out,
@@ -109,7 +130,40 @@ impl RunService<'_> {
         };
         store.write_report(&job.id, &report)?;
         store.set_status(&job.id, status, reason)?;
+
+        // A read-only job has nothing to apply: its answer is the report. The worktree and the
+        // branch go now; the job's files (the report, the logs) stay.
+        if readonly {
+            let cleaned = async {
+                git.worktree_remove(store.root(), &worktree).await?;
+                git.branch_delete(store.root(), &job.branch, true).await
+            };
+            if let Err(err) = cleaned.await {
+                self.events.emit(&OrkEvent::Warning {
+                    code: "cleanup_failed".into(),
+                    message: format!("the read-only job's worktree stays: {err:#}"),
+                });
+            }
+        }
         Ok(report)
+    }
+}
+
+/// Passes the events on, and adds them up.
+struct Counted<'a> {
+    inner: &'a dyn EventSink,
+    stats: Mutex<JobStats>,
+}
+
+impl EventSink for Counted<'_> {
+    fn emit(&self, event: &OrkEvent) {
+        if let Ok(mut stats) = self.stats.lock() {
+            stats.push(&EventLine {
+                ts: None,
+                event: event.clone(),
+            });
+        }
+        self.inner.emit(event);
     }
 }
 

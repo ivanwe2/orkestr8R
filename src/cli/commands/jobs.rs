@@ -12,7 +12,7 @@ use crate::cli::{CliContext, CommandResult, exit};
 use crate::git::Git;
 use crate::grunt::short_args;
 use crate::jobs::{JobState, JobStore};
-use crate::orders::JobStatus;
+use crate::orders::{JobStatus, OrderMode};
 use crate::process::ProcessRunner;
 use crate::text;
 
@@ -148,6 +148,9 @@ fn last_event(store: &JobStore, id: &str) -> Option<Value> {
 pub async fn diff(ctx: &CliContext, args: DiffArgs) -> anyhow::Result<CommandResult> {
     let (git, root, store) = open(ctx).await?;
     let state = store.load(job_id(&args.job))?;
+    if readonly(&store, &state) {
+        bail!("job {} was read-only: it changed nothing", state.id);
+    }
     if matches!(state.status, JobStatus::Applied | JobStatus::Discarded) {
         bail!(
             "job {} was {}; its branch is gone",
@@ -228,6 +231,13 @@ fn readable(line: &Value) -> Vec<String> {
 pub async fn apply(ctx: &CliContext, args: ApplyArgs) -> anyhow::Result<CommandResult> {
     let (git, root, store) = open(ctx).await?;
     let state = store.load(job_id(&args.job))?;
+    if readonly(&store, &state) {
+        bail!(
+            "job {} was read-only: there's nothing to apply; its answer is the report's summary (ork status {})",
+            state.id,
+            state.id
+        );
+    }
     match state.status {
         JobStatus::Passed => {}
         JobStatus::FailedChecks | JobStatus::GaveUp if args.force => {}
@@ -300,6 +310,13 @@ pub async fn discard(ctx: &CliContext, args: JobArg) -> anyhow::Result<CommandRe
     store.set_status(&state.id, JobStatus::Discarded, state.reason.clone())?;
     ctx.say(&format!("{} discarded", state.id));
     Ok(CommandResult::ok_with(json!({ "job": state.id })))
+}
+
+/// A read-only job (`--readonly`): nothing to diff or apply; its worktree is gone when it ends.
+fn readonly(store: &JobStore, state: &JobState) -> bool {
+    store
+        .load_order(&state.id)
+        .is_ok_and(|order| order.mode == OrderMode::Readonly)
 }
 
 fn age(job: &JobState) -> String {

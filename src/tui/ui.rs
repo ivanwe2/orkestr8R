@@ -154,12 +154,14 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
     let t = &app.theme;
     frame.render_widget(Block::new().style(t.band()), area);
     let bold = Modifier::BOLD;
-    let running = count(app, |s| s == JobStatus::Running);
-    let yours = count(app, |s| {
-        matches!(
-            s,
-            JobStatus::Passed | JobStatus::FailedChecks | JobStatus::GaveUp
-        )
+    let running = count(app, |job| job.state.status == JobStatus::Running);
+    // What waits on the chief: work to review. A read-only job's answer came with its result.
+    let yours = count(app, |job| {
+        !job.readonly
+            && matches!(
+                job.state.status,
+                JobStatus::Passed | JobStatus::FailedChecks | JobStatus::GaveUp
+            )
     });
 
     // The mark's topknot: one amber chief, two green grunts, who take turns while they work.
@@ -234,8 +236,8 @@ fn wordmark_spans<'a>(t: &Theme) -> Vec<Span<'a>> {
     ]
 }
 
-fn count(app: &App, pick: impl Fn(JobStatus) -> bool) -> usize {
-    app.jobs.iter().filter(|job| pick(job.state.status)).count()
+fn count(app: &App, pick: impl Fn(&JobView) -> bool) -> usize {
+    app.jobs.iter().filter(|job| pick(job)).count()
 }
 
 fn place_span<'a>(t: &Theme, place: Place) -> Span<'a> {
@@ -256,8 +258,12 @@ fn status_color(t: &Theme, status: JobStatus) -> Color {
     }
 }
 
-/// The job's status as a solid label, nine wide inside.
-fn status_pill<'a>(t: &Theme, status: JobStatus) -> Span<'a> {
+/// The job's status as a solid label, nine wide inside. A read-only job that passed has
+/// answered: nothing waits on it.
+fn status_pill<'a>(t: &Theme, status: JobStatus, readonly: bool) -> Span<'a> {
+    if readonly && status == JobStatus::Passed {
+        return Span::styled(format!(" {:<9} ", "ANSWERED"), t.pill_quiet());
+    }
     let text = match status {
         JobStatus::Running => "RUNNING",
         JobStatus::Passed => "PASSED",
@@ -320,7 +326,7 @@ fn draw_jobs(frame: &mut Frame, app: &App, area: Rect) {
                     job.state.id.clone(),
                     t.fg(text).add_modifier(Modifier::BOLD),
                 )),
-                Cell::from(status_pill(t, status)),
+                Cell::from(status_pill(t, status, job.readonly)),
                 Cell::from(Span::styled(age(job, app), t.fg(t.muted))),
                 Cell::from(Span::styled(files, t.fg(t.muted))),
                 Cell::from(Span::styled(crate::text::clean(&goal), t.fg(text))),
@@ -654,9 +660,15 @@ fn draw_detail(frame: &mut Frame, app: &App, area: Rect) {
     let color = status_color(t, status);
     let stats = &job.stats;
 
+    let answered = job.readonly && status == JobStatus::Passed;
     let mut title = vec![Span::styled(
-        format!(" {} ", label(status).to_uppercase()),
+        if answered {
+            " ANSWERED ".to_string()
+        } else {
+            format!(" {} ", label(status).to_uppercase())
+        },
         match status {
+            _ if answered => t.pill_quiet(),
             JobStatus::Applied | JobStatus::Discarded => t.pill_quiet(),
             _ => t.pill(color),
         },
