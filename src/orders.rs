@@ -154,6 +154,9 @@ pub struct Report {
     /// Read-only orders: the files the grunt read, so the chief can judge how far it looked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files_read: Vec<String>,
+    /// Failed checks that fail on the base commit too: the grunt didn't break them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub failing_before: Vec<String>,
     pub tokens: TokenCount,
     pub model: String,
     pub branch: String,

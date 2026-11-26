@@ -88,6 +88,7 @@ fn report(job: &str, status: JobStatus, files: usize) -> Report {
         tool_calls: 0,
         failed_tool_calls: 0,
         files_read: vec![],
+        failing_before: vec![],
         tokens: TokenCount {
             input: 1,
             output: 1,

@@ -316,6 +316,7 @@ fn the_job_store_keeps_state_order_and_report() {
         tool_calls: 0,
         failed_tool_calls: 0,
         files_read: vec![],
+        failing_before: vec![],
         tokens: TokenCount {
             input: 1,
             output: 2,
