@@ -211,6 +211,52 @@ async fn repo_puts_it_in_the_repo_for_everyone() {
     );
 }
 
+/// A cloned repo's `.claude/skills` that links into your home must not get your files
+/// overwritten. (Unix: Windows needs admin rights to make links.)
+#[cfg(unix)]
+#[tokio::test]
+async fn repo_refuses_to_write_through_a_link() {
+    let home = TempDir::new().unwrap();
+    let repo = TempRepo::new();
+    let mine = home.path().join("dotfiles");
+    std::fs::create_dir_all(mine.join("orkestr8r")).unwrap();
+    std::fs::write(mine.join("orkestr8r/SKILL.md"), "my own file").unwrap();
+    std::fs::create_dir_all(repo.path.join(".claude")).unwrap();
+    std::os::unix::fs::symlink(&mine, repo.path.join(".claude/skills")).unwrap();
+
+    let out = run_cli(
+        &["skill", "install", "claude", "--repo"],
+        &repo.path,
+        home_env(home.path()),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::ERROR);
+    assert!(out.stderr.contains("is a link"), "{}", out.stderr);
+    assert_eq!(
+        std::fs::read_to_string(mine.join("orkestr8r/SKILL.md")).unwrap(),
+        "my own file"
+    );
+
+    // A link to a file, the SKILL.md itself.
+    std::fs::remove_file(repo.path.join(".claude/skills")).unwrap();
+    let skill_dir = repo.path.join(".claude/skills/orkestr8r");
+    std::fs::create_dir_all(&skill_dir).unwrap();
+    std::os::unix::fs::symlink(mine.join("orkestr8r/SKILL.md"), skill_dir.join("SKILL.md"))
+        .unwrap();
+    let out = run_cli(
+        &["skill", "install", "claude", "--repo"],
+        &repo.path,
+        home_env(home.path()),
+    )
+    .await;
+    assert_eq!(out.code, exit::ERROR);
+    assert_eq!(
+        std::fs::read_to_string(mine.join("orkestr8r/SKILL.md")).unwrap(),
+        "my own file"
+    );
+}
+
 #[tokio::test]
 async fn list_shows_every_agent_found_and_installed() {
     let home = TempDir::new().unwrap();

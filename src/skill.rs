@@ -14,7 +14,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::Context;
+use anyhow::{Context, bail};
 
 use crate::env::Env;
 
@@ -168,8 +168,11 @@ pub fn targets(
         .collect()
 }
 
-/// Writes the skill to `path`.
-pub fn install(path: &Path) -> anyhow::Result<Change> {
+/// Writes the skill to `path`. `repo` is the repo root when `path` is in one ([`Scope::Repo`]).
+pub fn install(path: &Path, repo: Option<&Path>) -> anyhow::Result<Change> {
+    if let Some(root) = repo {
+        no_links_below(root, path)?;
+    }
     let change = match installed(path) {
         Installed::Current => return Ok(Change::Unchanged),
         Installed::Outdated => Change::Updated,
@@ -180,6 +183,28 @@ pub fn install(path: &Path) -> anyhow::Result<Change> {
     }
     std::fs::write(path, SKILL).with_context(|| format!("writing {}", path.display()))?;
     Ok(change)
+}
+
+/// A repo's folders come with whatever was cloned, and a cloned `.claude/skills` (or the
+/// `SKILL.md` in it) could be a link into your home: writing through it would overwrite one of
+/// your files. So nothing below the root may be a link. Your own folders may be (dotfiles).
+fn no_links_below(root: &Path, path: &Path) -> anyhow::Result<()> {
+    let rel = path
+        .strip_prefix(root)
+        .with_context(|| format!("{} is outside {}", path.display(), root.display()))?;
+    let mut at = root.to_path_buf();
+    for part in rel.components() {
+        at.push(part);
+        match std::fs::symlink_metadata(&at) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                bail!("{} is a link; not writing through it", at.display())
+            }
+            Ok(_) => {}
+            // The rest doesn't exist yet: install creates it.
+            Err(_) => break,
+        }
+    }
+    Ok(())
 }
 
 /// Line endings aside: git may have checked the file out with CRLF.

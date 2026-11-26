@@ -81,9 +81,11 @@ fn install(ctx: &CliContext, args: InstallArgs) -> anyhow::Result<CommandResult>
         );
     }
 
+    // In a repo, nothing below its root may be a link (see skill::install).
+    let repo = config::repo_root(&ctx.cwd).filter(|_| args.repo);
     let mut done = Vec::new();
     for target in targets.iter().filter(|t| wanted.contains(&t.agent)) {
-        let change = skill::install(&target.path)?;
+        let change = skill::install(&target.path, repo.as_deref())?;
         ctx.say(&format!(
             "✓ {:<13} {:<10} {}",
             target.agent.name(),

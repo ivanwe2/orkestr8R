@@ -166,7 +166,8 @@ writes it to `<dir>/orkestr8r/SKILL.md`, for the agents named and no others:
 | Gemini CLI | `gemini` | `~/.gemini/skills` | `.gemini/skills` |
 | any other | `other` | `~/.agents/skills`, the shared location | `.agents/skills` |
 
-`~` is `%USERPROFILE%` on Windows. Installing again updates an outdated copy (an older `ork`'s, or
+`~` is `%USERPROFILE%` on Windows. With `--repo`, nothing below the repo root may be a link: a cloned
+`.claude/skills` that points into your home would otherwise get one of your files overwritten. Installing again updates an outdated copy (an older `ork`'s, or
 an edited one) and leaves a current one alone. Without agents it's an error that names the ones
 found on this machine (their program on PATH, or their config folder). `result.data`:
 
