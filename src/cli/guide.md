@@ -103,6 +103,8 @@ Read the report. Look at the diff only if the status isn't `passed`, or the chan
 - `ork discard JOB`: drop the job's worktree and branch.
 - `ork logs JOB`: the whole conversation with the model, for when something needs debugging.
 - `ork jobs`: every job, newest first. `ork status JOB`: one job.
+- `ork tui`: a live view for people (not for you): jobs, tokens and speed per model. Use
+  `ork status JOB --json` instead.
 
 ## Setup and the rest
 

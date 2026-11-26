@@ -17,6 +17,8 @@ mod output;
 mod processes;
 mod run;
 mod scaffold;
+mod stats;
 mod support;
 mod text;
 mod tools;
+mod tui;

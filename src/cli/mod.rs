@@ -64,6 +64,8 @@ pub enum Commands {
     Discard(commands::jobs::JobArg),
     /// The guide for AI agents: when to delegate, the order, reading the report
     Guide,
+    /// A live view of the jobs and the models, for people: tokens, speed, cost; diff, apply
+    Tui,
 }
 
 /// The clap command tree (T15's sync test enumerates its subcommands).
@@ -121,6 +123,7 @@ pub async fn run(
         Commands::Apply(args) => complete(&ctx, commands::jobs::apply(&ctx, args)).await,
         Commands::Discard(args) => complete(&ctx, commands::jobs::discard(&ctx, args)).await,
         Commands::Guide => complete(&ctx, commands::guide::run(&ctx)).await,
+        Commands::Tui => complete(&ctx, commands::tui::run(&ctx)).await,
     }
 }
 

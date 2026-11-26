@@ -23,12 +23,18 @@ ork logs JOB                               the transcript: every message to and 
 ork apply JOB [--squash] [--force]         merge the job's branch into the current branch, then clean up
 ork discard JOB                            drop the worktree and the branch
 ork guide                                  the guide for AI agents (this file is the one for people)
+ork tui                                    a live view for people: jobs, the models' tokens, speed and cost (local or cloud),
+                                           the turn-by-turn track; diff, logs, apply and discard on keys
 ```
 
 In v0.1, `ork run` blocks until the job ends. An agent whose shell tool has a time limit starts it
 in the background, reads the job id from the first line, and polls `ork status JOB --json`. Its
 `result` has the job's status (`running` until the run ends) and, once it has ended, the same
 report and exit code `ork run` gave.
+
+`ork tui` is the one command without `--json` (it refuses it): it's for people. It reads the same
+job files as `ork jobs` and `ork status`, and its actions run the same `diff`, `logs`, `apply` and
+`discard`.
 
 ### Planned
 
@@ -53,7 +59,7 @@ ork models --server NAME --url URL [--key-env VAR] [--remove]
 
 ## `--json`
 
-Every command takes `--json`. Messages for people go to stderr. stdout carries one JSON object per
+Every command but `ork tui` takes `--json`. Messages for people go to stderr. stdout carries one JSON object per
 line, and the last line is always `result`.
 
 Every event has `event` first and then `ts`, when it happened (RFC 3339, UTC, milliseconds); the
