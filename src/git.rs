@@ -64,7 +64,8 @@ impl Git {
             .run(cwd, &["rev-parse", "--show-toplevel"])
             .await
             .context("not inside a git repository")?;
-        Ok(PathBuf::from(out.trim()))
+        let top = PathBuf::from(out.trim());
+        Ok(job_worktree_repo(&top).unwrap_or(top))
     }
 
     pub async fn head_sha(&self, root: &Path) -> anyhow::Result<String> {
@@ -323,4 +324,18 @@ fn combined(stdout: &[u8], stderr: &[u8]) -> String {
         String::from_utf8_lossy(stdout),
         String::from_utf8_lossy(stderr)
     )
+}
+
+/// Inside a job's worktree, `<repo>/.ork/worktrees/<id>`, git's top level is the worktree; the
+/// jobs live in the repo three levels up. Only when that repo really has the job (`.ork/jobs/<id>`):
+/// any other layout is taken as it is.
+fn job_worktree_repo(top: &Path) -> Option<PathBuf> {
+    let id = top.file_name()?;
+    let worktrees = top.parent()?;
+    let ork = worktrees.parent()?;
+    let repo = ork.parent()?;
+    let is_job = worktrees.file_name()? == "worktrees"
+        && ork.file_name()? == ".ork"
+        && ork.join("jobs").join(id).is_dir();
+    is_job.then(|| repo.to_path_buf())
 }
