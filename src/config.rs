@@ -64,6 +64,9 @@ pub struct DefaultsConfig {
     pub tool_timeout_seconds: u64,
     pub check_timeout_seconds: u64,
     pub request_timeout_seconds: u64,
+    /// A job's token budget (tokens in + out over all its requests); `None` = no budget.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u64>,
 }
 
 impl Default for DefaultsConfig {
@@ -75,6 +78,7 @@ impl Default for DefaultsConfig {
             tool_timeout_seconds: 300,
             check_timeout_seconds: 600,
             request_timeout_seconds: 600,
+            max_tokens: None,
         }
     }
 }
@@ -364,6 +368,9 @@ impl OrkConfig {
 
         let d = &self.defaults;
         positive(&mut problems, "defaults.max_turns", d.max_turns.into());
+        if let Some(budget) = d.max_tokens {
+            positive(&mut problems, "defaults.max_tokens", budget);
+        }
         positive(&mut problems, "defaults.max_minutes", d.max_minutes.into());
         positive(
             &mut problems,

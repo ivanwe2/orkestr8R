@@ -44,6 +44,9 @@ pub struct Order {
     /// What kind of work it is, one of [`KINDS`], for the scoreboard; never sent to the model.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
+    /// The job's token budget, tokens in + out over all its requests; `None` → the config's.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u64>,
 }
 
 /// The kinds of order the chief can name (`--kind`): the scoreboard compares models per kind.
@@ -115,6 +118,9 @@ pub fn validate(order: &Order, root: &Path, policy: &CommandPolicy) -> Vec<Strin
                     .to_string(),
             );
         }
+    }
+    if order.max_tokens == Some(0) {
+        problems.push("max_tokens: must be more than 0".to_string());
     }
     if let Some(kind) = &order.kind
         && !KINDS.contains(&kind.as_str())

@@ -3,8 +3,8 @@ use orkestr8r::env::Env;
 use orkestr8r::events::OrkEvent;
 use orkestr8r::grunt::first_message::{self, Seed};
 use orkestr8r::grunt::{
-    AcceptAll, FinishCall, FinishHandler, FinishVerdict, GruntLoop, LoopEnd, LoopOutcome,
-    LoopSettings, Transcript, prompts,
+    self as grunt, AcceptAll, FinishCall, FinishHandler, FinishVerdict, GruntLoop, LoopEnd,
+    LoopOutcome, LoopSettings, Transcript, prompts,
 };
 use orkestr8r::orders::{Order, OrderMode};
 use orkestr8r::tools::{ToolContext, ToolRegistry};
@@ -87,6 +87,7 @@ async fn run_loop(script: Script, handler: &mut impl FinishHandler, options: Opt
         temperature: 0.2,
         max_tokens: 512,
         context_tokens: options.context_tokens,
+        token_budget: options.order.max_tokens,
     };
     let mut grunt = GruntLoop::new(
         &client,
@@ -465,4 +466,77 @@ fn a_readonly_first_message_says_so() {
         "{message}"
     );
     assert!(message.contains("## Checks\nNone.\n"));
+}
+
+/// Each fake reply reports 100 tokens in and 20 out: 120 a turn.
+#[tokio::test]
+async fn the_token_budget_nudges_at_80_percent_then_stops() {
+    let script = Script::new()
+        .tool_call("read_file", json!({ "path": "src/calc.rs" }))
+        .tool_call("read_file", json!({ "path": "README.md" }))
+        .tool_call("read_file", json!({ "path": "src/calc.rs" }))
+        .tool_call("finish", finish("never reached"));
+    let options = Options {
+        order: Order {
+            max_tokens: Some(300),
+            ..order()
+        },
+        ..Default::default()
+    };
+
+    let run = run_loop(script, &mut AcceptAll, options).await;
+
+    // 120, 240 (80%: the nudge), 360 (over: stop before the third call runs)
+    assert_eq!(run.outcome.end, LoopEnd::GaveUp);
+    assert_eq!(run.outcome.reason.as_deref(), Some("max_tokens"));
+    assert_eq!(run.server.requests().len(), 3);
+    let nudges = |request: usize| {
+        run.messages(request)
+            .iter()
+            .filter(|m| m["role"] == "user" && m["content"] == grunt::NUDGE_BUDGET)
+            .count()
+    };
+    assert_eq!(
+        (nudges(1), nudges(2)),
+        (0, 1),
+        "once, after the turn that crossed 80%"
+    );
+    let warnings = run
+        .events
+        .iter()
+        .filter(|e| matches!(e, OrkEvent::Warning { code, .. } if code == "token_budget"))
+        .count();
+    assert_eq!(warnings, 1);
+    let tools_run = run
+        .events
+        .iter()
+        .filter(|e| matches!(e, OrkEvent::Tool { .. }))
+        .count();
+    assert_eq!(tools_run, 2, "the third reply's call didn't run");
+}
+
+#[test]
+fn the_orders_budget_wins_over_the_configs() {
+    let mut config = OrkConfig::default();
+    config.defaults.max_tokens = Some(1000);
+    let role = orkestr8r::config::RoleConfig::default();
+    let budget =
+        |order: &Order, config: &OrkConfig| LoopSettings::new(order, config, &role).token_budget;
+
+    assert_eq!(
+        budget(
+            &Order {
+                max_tokens: Some(300),
+                ..order()
+            },
+            &config
+        ),
+        Some(300)
+    );
+    assert_eq!(budget(&order(), &config), Some(1000));
+    assert_eq!(
+        budget(&order(), &OrkConfig::default()),
+        None,
+        "no budget, no limit"
+    );
 }

@@ -54,6 +54,9 @@ pub struct RunArgs {
     pub max_repairs: Option<u32>,
     #[arg(long)]
     pub max_minutes: Option<u32>,
+    /// The job's token budget: tokens in + out over all its requests
+    #[arg(long)]
+    pub max_tokens: Option<u64>,
 }
 
 pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResult> {
@@ -227,6 +230,7 @@ fn build_order(ctx: &CliContext, args: &RunArgs, root: &Path) -> anyhow::Result<
     order.max_turns = args.max_turns.or(order.max_turns);
     order.max_repairs = args.max_repairs.or(order.max_repairs);
     order.max_minutes = args.max_minutes.or(order.max_minutes);
+    order.max_tokens = args.max_tokens.or(order.max_tokens);
     Ok(order)
 }
 

@@ -76,7 +76,9 @@ to `ork run - --json`: no quoting trouble with long goals (PowerShell), and no t
 - `--kind KIND`: `test`, `fix`, `feature`, `refactor`, `docs`, `chore` or `investigate`; it feeds
   the scoreboard that compares models per kind, so set it.
 - Limits: `max_turns` 40, `max_repairs` 2, `max_minutes` 20 unless the config or the order says
-  otherwise.
+  otherwise. `max_tokens` (`--max-tokens N`): a token budget, in + out over every request; at 80%
+  the grunt is told to finish, at the budget it stops (`gave_up`, `max_tokens`). Worth setting on
+  paid roles.
 
 ## Running it
 
@@ -106,7 +108,7 @@ Read the report. Look at the diff only if the status isn't `passed`, or the chan
   order, more context or a better `--path` often fixes it; or apply it anyway with `--force` and
   finish it yourself.
 - `gave_up`: the reason says why. `no_tool_calls` or `malformed_tool_calls` usually means the model
-  or its chat template (`ork doctor`); `max_turns` or `max_minutes` means the order was too big.
+  or its chat template (`ork doctor`); `max_turns`, `max_minutes` or `max_tokens` means the order was too big.
 - `error`: the run itself failed (server down, git trouble); the `error` field says what.
 
 ## Then
