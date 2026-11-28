@@ -25,7 +25,7 @@ The same rules as docs/plan-v0.1.md:
 - [x] T01 Roles and kinds on the order
 - [x] T02 Token budget · explain
 - [x] T03 Thinking switch per role
-- [ ] T04 Shrink old tool arguments · explain
+- [x] T04 Shrink old tool arguments · explain
 - [x] T05 Secret files guard · explain
 - [ ] T06 Job lifecycle: `queued`, `ork cancel`, one run path · explain
 - [ ] T07 Background jobs: `ork run --detach` and the worker · explain

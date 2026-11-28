@@ -19,9 +19,15 @@ pub fn parameters() -> Value {
     })
 }
 
+/// What a write that copies a stub from the history gets back (see `grunt::context`).
+pub const PLACEHOLDER: &str = "refused: that's a placeholder from your history, not the file's content; read the file (or the code you mean) and write the real text";
+
 pub fn run(args: &Value, ctx: &ToolContext) -> ToolResult {
     let rel = arg_str(args, "path", "");
     let content = arg_str(args, "content", "");
+    if content.contains(crate::grunt::context::ARGUMENT_STUB_MARK) {
+        return ToolResult::error(PLACEHOLDER);
+    }
     let path = match ctx.guard.resolve(rel, true) {
         Ok(path) => path,
         Err(refused) => return ToolResult::error(refused),

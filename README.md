@@ -73,7 +73,7 @@ flowchart LR
   the order's scope, commands must be on the allow-list and run without a shell.
 - `finish` doesn't end the job; the checks do. The model saying "done" counts for nothing.
 - Guards catch the ways local models get stuck (text instead of tool calls, broken calls, the same
-  call again), and old tool output is stubbed when the context fills up.
+  call again), and old tool output and old long arguments are stubbed when the context fills up.
 - Every model request and tool call is an event: tokens, seconds, tokens per second, exit codes.
 
 What a run looks like, for people (an example; agents get the same as JSON Lines with `--json`):

@@ -29,6 +29,9 @@ pub fn parameters() -> Value {
 
 pub fn run(args: &Value, ctx: &ToolContext) -> ToolResult {
     let rel = arg_str(args, "path", "");
+    if arg_str(args, "new", "").contains(crate::grunt::context::ARGUMENT_STUB_MARK) {
+        return ToolResult::error(super::write_file::PLACEHOLDER);
+    }
     let path = match ctx.guard.resolve(rel, true) {
         Ok(path) => path,
         Err(refused) => return ToolResult::error(refused),
