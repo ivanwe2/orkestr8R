@@ -21,7 +21,7 @@ pub fn load_config(ctx: &CliContext) -> anyhow::Result<LoadedConfig> {
     let loaded = config::load(&ctx.cwd, &ctx.env)?;
     for warning in &loaded.warnings {
         ctx.emit(OrkEvent::Warning {
-            code: "key_ignored".into(),
+            code: config::warning_code(warning).into(),
             message: warning.clone(),
         });
     }

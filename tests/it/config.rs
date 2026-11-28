@@ -606,3 +606,41 @@ fn only_your_own_files_set_extra_body() {
     );
     assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
 }
+
+#[test]
+fn secret_patterns_add_up_and_only_your_file_makes_exceptions() {
+    let setup = Setup::new();
+    let mut user = grunt_config("qwen");
+    user["secrets"] = json!({ "deny": ["*.secret"], "allow": ["fixtures/.env"] });
+    write_json(&setup.user_file(), user);
+    // The repo adds a pattern (fine) and tries an exception (ignored).
+    write_json(
+        &setup.repo_file(),
+        json!({ "secrets": { "deny": ["vault/**"], "allow": [".env"] } }),
+    );
+
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+
+    assert_eq!(loaded.config.secrets.deny, ["*.secret", "vault/**"]);
+    assert_eq!(loaded.config.secrets.allow, ["fixtures/.env"]);
+    assert!(
+        loaded
+            .warnings
+            .iter()
+            .any(|w| w.starts_with("secrets.allow")),
+        "{:?}",
+        loaded.warnings
+    );
+    assert_eq!(
+        config::warning_code(&loaded.warnings[0]),
+        "allow_ignored",
+        "{:?}",
+        loaded.warnings
+    );
+    let secrets =
+        orkestr8r::secrets::Secrets::new(&loaded.config.secrets.deny, &loaded.config.secrets.allow)
+            .unwrap();
+    assert!(secrets.is_secret(".env") && secrets.is_secret("a/b.secret"));
+    assert!(secrets.is_secret("vault/keys.json"));
+    assert!(!secrets.is_secret("fixtures/.env"), "your exception stands");
+}

@@ -217,6 +217,13 @@ or `~/.config/orkestr8r/ork.json`), then the repo's `ork.json`, each key overrid
     (not `model`, `messages`, `tools`, `tool_choice` or `stream`). Only your own file (or `ORK_CONFIG`) sets
     it: it's sent with your API key, so a repo's `ork.json` can't (it's dropped with a warning).
 - `allow_commands`: what checks and the grunt may run (see The order).
+- `secrets`: files the grunt's tools never read, write or grep, beyond the built-in list (`.env`,
+  `.env.*` but not `.env.example`/`.sample`/`.template`, `*.pem`, `*.key`, `*.p12`, `*.pfx`,
+  `id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `.npmrc`, `.pypirc`, `.netrc`, `.pgpass`,
+  `.git-credentials`, `*.tfvars`). `deny` adds glob patterns (a pattern without `/` matches at any
+  depth) and adds up over the files; `allow` makes exceptions and counts only from your own file (a
+  repo's is dropped with an `allow_ignored` warning). Order `paths` and `ork ask --path` refuse them
+  too. Commands and checks aren't covered: they can read anything.
 - `defaults`: the limits an order doesn't set; `max_tokens` has no default.
 
 ## MCP tools

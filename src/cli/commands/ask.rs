@@ -55,6 +55,22 @@ pub async fn run(ctx: &CliContext, args: AskArgs) -> anyhow::Result<CommandResul
     }
 
     let loaded = load_config(ctx)?;
+    // Secret files never go to the model: judged by the path inside the repo (links followed), or
+    // by the name for a file outside it.
+    let secrets =
+        crate::secrets::Secrets::new(&loaded.config.secrets.deny, &loaded.config.secrets.allow)?;
+    let root = root.and_then(|root| dunce::canonicalize(root).ok());
+    for (name, file) in &files {
+        let real = dunce::canonicalize(file).unwrap_or_else(|_| file.clone());
+        let rel = root
+            .as_ref()
+            .and_then(|root| real.strip_prefix(root).ok())
+            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_else(|| name.clone());
+        if secrets.is_secret(&rel) {
+            bail!("refused: {name} is a secret file: ork doesn't show secrets to the model");
+        }
+    }
     let (client, role) = ModelClient::for_role(&loaded.config, &args.role, &ctx.env)?;
 
     let (prompt, truncated) = render(&args.question, &files)?;

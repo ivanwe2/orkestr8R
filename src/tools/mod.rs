@@ -75,7 +75,8 @@ impl ToolContext {
         env: &Env,
         cancel: CancellationToken,
     ) -> anyhow::Result<Self> {
-        let guard = PathGuard::new(root, &order.write_scope)?;
+        let secrets = crate::secrets::Secrets::new(&config.secrets.deny, &config.secrets.allow)?;
+        let guard = PathGuard::new(root, &order.write_scope, secrets)?;
         Ok(Self {
             root: guard.root().to_path_buf(),
             guard,

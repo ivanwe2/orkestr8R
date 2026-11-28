@@ -102,6 +102,8 @@ pub async fn run(args: &Value, ctx: &ToolContext) -> ToolResult {
                 .map(normalize_line)
                 // belt and braces: nothing from inside .git, however it got matched
                 .filter(|l| !l.starts_with(".git/") && !l.contains("/.git/"))
+                // nor from a secret file: the model never sees what's in `.env`
+                .filter(|l| !ctx.guard.is_secret(l.split(':').next().unwrap_or_default()))
                 .collect();
             if lines.is_empty() {
                 return ToolResult::ok("no matches");

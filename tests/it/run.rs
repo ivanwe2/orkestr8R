@@ -578,3 +578,32 @@ async fn a_role_with_thinking_off_says_so_in_every_request() {
         );
     }
 }
+
+#[tokio::test]
+async fn a_secret_file_cant_be_shown_to_the_grunt() {
+    let server = FakeModelServer::start(Script::new()).await;
+    let ws = workspace(&server);
+    ws.write(".env", "TOKEN=abc\n");
+
+    let run = run_cli(
+        &run_args(&["--path", ".env", "--json"]),
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+    assert_eq!(run.code, exit::ERROR);
+    let error = json_lines(&run.stdout).pop().unwrap()["error"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(error.contains("paths: .env is a secret file"), "{error}");
+
+    let ask = run_cli(
+        &["ask", "What's in it?", "--path", ".env", "--json"],
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+    assert_eq!(ask.code, exit::ERROR);
+    assert!(server.requests().is_empty(), "nothing sent to the model");
+}
