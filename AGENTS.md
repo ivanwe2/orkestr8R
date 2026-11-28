@@ -22,8 +22,8 @@ docs/vision.md.
 
 ## Status and what to work on
 
-**v0.1 is being built. The work is in docs/plan-v0.1.md: tasks T01–T16, each specified to be done
-without asking.**
+**v0.1.0 is released (docs/plan-v0.1.md). v0.2 is being built: the work is in docs/plan-v0.2.md,
+tasks T01–T16, each specified to be done without asking.**
 - Take the first unticked task in its Progress list whose dependencies are ticked.
 - One task per branch and PR; tick it in the same PR.
 - If the spec is wrong or unclear, fix the spec in the same PR and say so.

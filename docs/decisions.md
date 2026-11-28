@@ -2,6 +2,29 @@
 
 Newest first. Each line: what was decided, and why. Open questions at the bottom.
 
+## 2026-11-28
+
+- **v0.2 is "several models, in the background"** (Ivan): background jobs, a model per order, a
+  per-server queue, stacked orders, starting from the working tree, the scoreboard, plus the token
+  budget, the thinking switch, worktree setup with a secret-file guard, and shrinking old tool
+  arguments. **MCP moves to v0.3**, the web UI (`ork serve`) later, and escalation stays manual (the
+  chief picks `--role`). The plan: docs/plan-v0.2.md; its "Decisions made for v0.2" section has the
+  design decisions:
+  - no daemon: a background job is its own `ork __work` process;
+  - cancel is a file;
+  - the queue is machine-wide, made of OS file locks with FIFO tickets;
+  - `queued` is the one new status;
+  - apply lands a job the way it started;
+  - a fixed set of order kinds.
+- **A job starts from the working tree when it's dirty** (Ivan): a snapshot made through a temporary
+  index (untracked files included, the user's index and files untouched), applied back as
+  uncommitted changes; `--base head` keeps v0.1's behaviour.
+- **One reviewed `unsafe` module is allowed if Windows needs it** (Ivan): std lets a child inherit
+  every inheritable handle (`inherit_handles` is unstable), so a background worker would hold
+  `ork run --detach`'s stdout pipe open. If T07's test shows it, a Windows-only module clears the
+  inherit flag on ork's own std handles; `unsafe_code` goes from `forbid` to `deny` for that module
+  alone.
+
 ## 2026-11-27
 
 - **v0.1.0 is released** with done-criterion 4 met in part: a fresh Claude Code session, given only

@@ -37,8 +37,8 @@
 > [!NOTE]
 > **v0.1.0 is out (November 2026):** the CLI, the dashboard and the skill, dogfooded on real work
 > ([docs/dogfood/v0.1.md](docs/dogfood/v0.1.md)). Downloads for Linux and Windows are on the
-> [releases page](https://github.com/ivanwe2/orkestr8R/releases). Next: v0.2 (MCP, background
-> jobs, a model per order); every idea is in [docs/ideas.md](docs/ideas.md).
+> [releases page](https://github.com/ivanwe2/orkestr8R/releases). Next: v0.2, several models in the
+> background ([docs/plan-v0.2.md](docs/plan-v0.2.md)); every idea is in [docs/ideas.md](docs/ideas.md).
 
 ## The idea
 
@@ -172,6 +172,7 @@ Details, and how to report a problem: [SECURITY.md](SECURITY.md).
 | [docs/vision.md](docs/vision.md) | why, principles, vocabulary, what's borrowed from localdub, roadmap |
 | [docs/iteration-1.md](docs/iteration-1.md) | the first build: scope, architecture, milestones M0–M5 |
 | [docs/plan-v0.1.md](docs/plan-v0.1.md) | v0.1 task by task (T01–T16): contracts, files, acceptance commands, for people and agents |
+| [docs/plan-v0.2.md](docs/plan-v0.2.md) | v0.2 task by task: background jobs, a model per order, the queue, the scoreboard |
 | [docs/cli.md](docs/cli.md) | the `ork` CLI and MCP contract: commands, orders, reports, events, exit codes |
 | [docs/agent-loop.md](docs/agent-loop.md) | what an agent loop is, one turn on the wire, how the grunt's loop works, a learning path |
 | [docs/swarm.md](docs/swarm.md) | where it goes next: tiers, plans, parallel grunts, verifiers, merge queue |

@@ -36,8 +36,9 @@ flowchart TB
   checks --> report([report, ~400 tokens]) --> chief
 ```
 
-- `ork mcp` runs the jobs in-process: a background tokio task fed by a channel, one job at a time.
-  Simple, but jobs end when the chief's session closes. Iteration 2's `ork serve` fixes that.
+- Background jobs (v0.2) are their own processes, `ork __work JOB`, cut off from the terminal, so
+  they outlive the chief's session; a per-server queue keeps them within each server's capacity
+  (docs/plan-v0.2.md). `ork mcp` (v0.3) submits them the way `ork run --detach` does.
 - Every job: worktree `.ork/worktrees/<id>` on branch `ork/<id>`, from the current HEAD.
 - Every job writes `.ork/jobs/<id>/events.jsonl` (the same events `--json` prints) and
   `transcript.jsonl` (every message sent to and from the model). The chief never reads these unless
@@ -128,8 +129,11 @@ defaults. `ork init` writes it; `ork models` changes it.
 **Releases:**
 - **v0.1** = M0 without MCP, plus M1, M2, and the guide and skill from M4. Task by task in
   **docs/plan-v0.1.md**.
-- **v0.2** = M3 (MCP, background jobs, MCP Tasks) and the rest of M4.
-- **v0.3** = M5.
+- **v0.2** = background jobs (the jobs part of M3), a model per order, a per-server queue, starting
+  from the working tree, the scoreboard. Task by task in **docs/plan-v0.2.md** (re-planned
+  2026-11-28: Ivan put several models ahead of MCP).
+- **v0.3** = the rest of M3 and M4 (`ork mcp`, MCP Tasks, `ork init` writing delegation rules and MCP
+  registration), the escalation ladder, and M5 (the eval).
 
 **Iteration 1 is done** when, on a real feature, the chief writes a plan, delegates at least 3 orders,
 at least 2 of them pass their checks without the chief rewriting them, and nothing was copy-pasted.
