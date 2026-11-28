@@ -23,7 +23,8 @@ ork status JOB                             one job: status, the last event while
 ork diff JOB [--stat]                      the job's changes
 ork logs JOB                               the transcript: every message to and from the model
 ork apply JOB [--squash] [--force]         merge the job's branch into the current branch, then clean up
-ork discard JOB                            drop the worktree and the branch
+ork discard JOB                            drop the worktree and the branch (a job still going is cancelled first)
+ork cancel JOB                             stop a queued or running job: error, reason cancelled; its work stays on its branch
 ork guide                                  the guide for AI agents (this file is the one for people)
 ork skill install AGENT… [--repo]          install the skill for the agents you use: claude, opencode, codex, gemini, other, all
 ork skill list [--repo]                    each agent: on this machine?, the skill missing, current or outdated, its path
@@ -35,7 +36,10 @@ ork                                        alone, in a terminal: the same as ork
 In v0.1, `ork run` blocks until the job ends. An agent whose shell tool has a time limit starts it
 in the background, reads the job id from the first line, and polls `ork status JOB --json`. Its
 `result` has the job's status (`running` until the run ends) and, once it has ended, the same
-report and exit code `ork run` gave. A running job keeps a heartbeat (`.ork/jobs/<id>/heartbeat`, rewritten
+report and exit code `ork run` gave. A job is `queued` from when it's made until it starts (a background worker
+starting, a server with no free slot: v0.2), then `running`. `ork cancel JOB` asks it to stop (a
+`cancel` file in its job directory, checked every second) and waits up to 30 s: it ends as `error`,
+reason `cancelled`, with its work committed on its branch and a report. A running job keeps a heartbeat (`.ork/jobs/<id>/heartbeat`, rewritten
 every 10 s); one quiet for 90 s is reported as `error`, reason `ork stopped: …`, by `status`, `jobs`
 and the TUI. That's computed, not written: if the run was only asleep, its final status still lands.
 
@@ -104,7 +108,7 @@ examples below leave `ts` out after the first two.
 | `check` | every check: command, exit code, seconds, last lines |
 | `repair` | a repair turn starts |
 | `warning` | e.g. a malformed tool call, a truncated output, a think block stripped |
-| `result` | always last: `status` (`ok`, `passed`, `failed_checks`, `gave_up`, `error`; `ork status` also `running`, `applied`, `discarded`; `waiting` later), `exit_code`; then, as needed, `job`, `report` (`run`, `status`), `data` (other commands' output) and `error` (the message, when the status is `error`) |
+| `result` | always last: `status` (`ok`, `passed`, `failed_checks`, `gave_up`, `error`; `ork status` also `queued`, `running`, `applied`, `discarded`; `waiting` later), `exit_code`; then, as needed, `job`, `report` (`run`, `status`), `data` (other commands' output) and `error` (the message, when the status is `error`) |
 
 `call` events add up to the token ledger: what each job cost on which model.
 

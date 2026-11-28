@@ -139,7 +139,9 @@ impl RunService<'_> {
 
         let stats = counted.stats.lock().map(|s| s.clone()).unwrap_or_default();
         let readonly = order.mode == OrderMode::Readonly;
-        let seconds = (Utc::now() - job.created_at).num_milliseconds().max(0) as f64 / 1000.0;
+        // From when it started: time waiting in the queue isn't the job's.
+        let started = job.started_at.unwrap_or(job.created_at);
+        let seconds = (Utc::now() - started).num_milliseconds().max(0) as f64 / 1000.0;
 
         let report = Report {
             job: job.id.clone(),

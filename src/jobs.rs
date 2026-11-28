@@ -63,6 +63,9 @@ pub struct JobState {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server: Option<String>,
+    /// When it left the queue and began to run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<DateTime<Utc>>,
 }
 
 /// The files of one job.
@@ -76,6 +79,8 @@ pub struct JobPaths {
     pub report: PathBuf,
     /// The time, rewritten every few seconds while `ork run` runs the job.
     pub heartbeat: PathBuf,
+    /// Present when someone asked the job to stop (`ork cancel`); the job watches for it.
+    pub cancel: PathBuf,
 }
 
 /// The jobs of one repository.
@@ -107,6 +112,7 @@ impl JobStore {
             transcript: dir.join("transcript.jsonl"),
             report: dir.join("report.json"),
             heartbeat: dir.join("heartbeat"),
+            cancel: dir.join("cancel"),
             dir,
         }
     }
@@ -116,7 +122,8 @@ impl JobStore {
         self.root.join(".ork").join("worktrees").join(id)
     }
 
-    /// A new job: picks an id, writes `order.json` and `state.json` (status `running`).
+    /// A new job: picks an id, writes `order.json` and `state.json` (status `queued`: it starts
+    /// with [`JobStore::start`]).
     pub fn create(&self, order: &Order, base_sha: &str) -> anyhow::Result<JobState> {
         self.create_on(order, base_sha, None)
     }
@@ -128,15 +135,27 @@ impl JobStore {
         base_sha: &str,
         model: Option<(&str, &str)>,
     ) -> anyhow::Result<JobState> {
-        let id = new_job_id(|id| self.jobs_dir().join(id).exists());
+        // Several processes may make jobs at once (background runs): an id is only ours once its
+        // directory is, and `create_dir` fails if another process got there first.
+        let jobs = self.jobs_dir();
+        std::fs::create_dir_all(&jobs).with_context(|| format!("creating {}", jobs.display()))?;
+        let id = loop {
+            let id = new_job_id(|id| jobs.join(id).exists());
+            match std::fs::create_dir(jobs.join(&id)) {
+                Ok(()) => break id,
+                Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(err) => {
+                    return Err(err)
+                        .with_context(|| format!("creating {}", jobs.join(&id).display()));
+                }
+            }
+        };
         let paths = self.paths(&id);
-        std::fs::create_dir_all(&paths.dir)
-            .with_context(|| format!("creating {}", paths.dir.display()))?;
         write_atomic(&paths.order, &serde_json::to_vec_pretty(order)?)?;
 
         let now = Utc::now();
         let state = JobState {
-            status: JobStatus::Running,
+            status: JobStatus::Queued,
             goal: order.goal.clone(),
             base_sha: base_sha.to_string(),
             branch: format!("ork/{id}"),
@@ -148,11 +167,36 @@ impl JobStore {
             role: Some(order.role_name().to_string()),
             model: model.map(|(model, _)| model.to_string()),
             server: model.map(|(_, server)| server.to_string()),
+            started_at: None,
             id,
         };
         write_atomic(&paths.state, &serde_json::to_vec_pretty(&state)?)?;
         self.beat(&state.id)?;
         Ok(state)
+    }
+
+    /// The job leaves the queue: `running`, from now.
+    pub fn start(&self, id: &str) -> anyhow::Result<JobState> {
+        let mut state = self.load_raw(id)?;
+        let now = Utc::now();
+        state.status = JobStatus::Running;
+        state.started_at = Some(now);
+        state.updated_at = now;
+        write_atomic(&self.paths(id).state, &serde_json::to_vec_pretty(&state)?)?;
+        Ok(state)
+    }
+
+    /// Asks the job to stop: it checks every second (see `work::run_job`).
+    pub fn request_cancel(&self, id: &str) -> anyhow::Result<()> {
+        write_atomic(&self.paths(id).cancel, Utc::now().to_rfc3339().as_bytes())
+    }
+
+    pub fn cancel_requested(&self, id: &str) -> bool {
+        self.paths(id).cancel.exists()
+    }
+
+    pub fn clear_cancel(&self, id: &str) {
+        let _ = std::fs::remove_file(self.paths(id).cancel);
     }
 
     /// Writes the time into the job's heartbeat: `ork run` does it every [`BEAT`] while it runs.
@@ -174,7 +218,7 @@ impl JobStore {
     /// so itself: it's known by its heartbeat going quiet. Reported as `error`, never written:
     /// if the run is alive after all (a laptop waking up), its own final status still lands.
     fn effective(&self, mut state: JobState, now: DateTime<Utc>) -> JobState {
-        if state.status != JobStatus::Running {
+        if !state.status.is_live() {
             return state;
         }
         let quiet_since = match self.last_beat(&state.id) {
@@ -205,8 +249,8 @@ impl JobStore {
         Ok(self.effective(self.load_raw(id)?, Utc::now()))
     }
 
-    /// The state as the file says, a stopped run still `running`.
-    fn load_raw(&self, id: &str) -> anyhow::Result<JobState> {
+    /// The state as the file says: a stopped run still `running`.
+    pub fn load_raw(&self, id: &str) -> anyhow::Result<JobState> {
         if !is_job_id(id) {
             bail!("{id:?} is not a job id (ork jobs lists them)");
         }

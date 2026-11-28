@@ -251,6 +251,7 @@ fn place_span<'a>(t: &Theme, place: Place) -> Span<'a> {
 
 fn status_color(t: &Theme, status: JobStatus) -> Color {
     match status {
+        JobStatus::Queued => t.muted,
         JobStatus::Running => t.green,
         JobStatus::Passed => t.amber,
         JobStatus::FailedChecks | JobStatus::GaveUp | JobStatus::Error => t.red,
@@ -265,6 +266,7 @@ fn status_pill<'a>(t: &Theme, status: JobStatus, readonly: bool) -> Span<'a> {
         return Span::styled(format!(" {:<9} ", "ANSWERED"), t.pill_quiet());
     }
     let text = match status {
+        JobStatus::Queued => "QUEUED",
         JobStatus::Running => "RUNNING",
         JobStatus::Passed => "PASSED",
         JobStatus::FailedChecks => "FAILED",
@@ -274,7 +276,7 @@ fn status_pill<'a>(t: &Theme, status: JobStatus, readonly: bool) -> Span<'a> {
         JobStatus::Discarded => "DISCARDED",
     };
     let style = match status {
-        JobStatus::Applied | JobStatus::Discarded => t.pill_quiet(),
+        JobStatus::Queued | JobStatus::Applied | JobStatus::Discarded => t.pill_quiet(),
         status => t.pill(status_color(t, status)),
     };
     Span::styled(format!(" {text:<9} "), style)

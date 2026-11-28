@@ -722,7 +722,10 @@ impl App {
                         },
                     });
                 }
-                JobStatus::Running => self.say(format!("{id} is still running"), Tone::Info),
+                JobStatus::Queued | JobStatus::Running => self.say(
+                    format!("{id} is still {}", status.as_str()),
+                    Tone::Info,
+                ),
                 JobStatus::Error => self.say(
                     format!("{id} ended in an error; there's nothing to apply"),
                     Tone::Info,

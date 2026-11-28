@@ -170,6 +170,7 @@ fn jobs() -> Jobs {
 
     let running_state = store.create(&order("Add Sum to calc"), "abc123").unwrap();
     let running = running_state.id.clone();
+    store.start(&running).unwrap();
     write(
         &running,
         &[
@@ -1021,6 +1022,7 @@ fn demo() -> (TempRepo, JobStore, DateTime<Utc>) {
         .create(&order("Rate limiting for the login endpoint"), "abc123")
         .unwrap();
     let running = running_state.id.clone();
+    store.start(&running).unwrap();
     let mut events = vec![
         local(1, 6100, 120, 51.0),
         tool(1, "read_file", "src/auth/login.ts", true),

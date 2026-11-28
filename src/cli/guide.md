@@ -116,7 +116,8 @@ Read the report. Look at the diff only if the status isn't `passed`, or the chan
 - `ork diff JOB [--stat]`: the job's changes.
 - `ork apply JOB [--squash]`: merge them into your current branch (needs a clean checkout).
   `--force` applies a `failed_checks` or `gave_up` job.
-- `ork discard JOB`: drop the job's worktree and branch.
+- `ork discard JOB`: drop the job's worktree and branch (a job still going is cancelled first).
+- `ork cancel JOB`: stop a queued or running job; it ends as `error`, reason `cancelled`.
 - `ork logs JOB`: the whole conversation with the model, for when something needs debugging.
 - `ork jobs`: every job, newest first. `ork status JOB`: one job.
 - `ork tui` (and `ork` alone): a live view for people (not for you): jobs, tokens and speed per model. Use

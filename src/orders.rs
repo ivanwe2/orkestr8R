@@ -70,10 +70,12 @@ impl Order {
     }
 }
 
-/// Where a job is. `running` until the run ends; `applied` / `discarded` after the chief decides.
+/// Where a job is: `queued` until it starts, `running` until the run ends, then its outcome;
+/// `applied` / `discarded` after the chief decides.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobStatus {
+    Queued,
     Running,
     Passed,
     FailedChecks,
@@ -87,6 +89,7 @@ impl JobStatus {
     /// The name on the wire: `passed`, `failed_checks`, …
     pub fn as_str(self) -> &'static str {
         match self {
+            JobStatus::Queued => "queued",
             JobStatus::Running => "running",
             JobStatus::Passed => "passed",
             JobStatus::FailedChecks => "failed_checks",
@@ -95,6 +98,11 @@ impl JobStatus {
             JobStatus::Applied => "applied",
             JobStatus::Discarded => "discarded",
         }
+    }
+
+    /// Not over yet: waiting to start, or running.
+    pub fn is_live(self) -> bool {
+        matches!(self, JobStatus::Queued | JobStatus::Running)
     }
 }
 

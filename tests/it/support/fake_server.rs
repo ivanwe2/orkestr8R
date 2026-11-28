@@ -37,6 +37,8 @@ enum Step {
     Json(Value),
     Raw(String),
     Status(u16),
+    /// Hold the next step's reply back this long (a slow model, for cancel and queue tests).
+    Delay(Duration),
 }
 
 impl Script {
@@ -78,6 +80,12 @@ impl Script {
     /// An error status, with the body `error {code}`.
     pub fn status(mut self, code: u16) -> Self {
         self.steps.push(Step::Status(code));
+        self
+    }
+
+    /// The next reply comes `ms` milliseconds late.
+    pub fn delay(mut self, ms: u64) -> Self {
+        self.steps.push(Step::Delay(Duration::from_millis(ms)));
         self
     }
 
@@ -234,8 +242,13 @@ pub async fn unreachable_url() -> String {
 
 async fn chat(State(shared): State<Arc<Shared>>, headers: HeaderMap, body: Bytes) -> Response {
     shared.record("/v1/chat/completions", &headers, &body);
-    let step = shared.steps.lock().unwrap().pop_front();
+    let mut step = shared.steps.lock().unwrap().pop_front();
+    while let Some(Step::Delay(wait)) = step {
+        tokio::time::sleep(wait).await;
+        step = shared.steps.lock().unwrap().pop_front();
+    }
     match step {
+        Some(Step::Delay(_)) => unreachable!("delays are taken above"),
         Some(Step::Json(reply)) => axum::Json(reply).into_response(),
         Some(Step::Raw(body)) => {
             ([(header::CONTENT_TYPE, "application/json")], body).into_response()

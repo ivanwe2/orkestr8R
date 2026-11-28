@@ -110,6 +110,7 @@ async fn status_of_a_running_job_shows_its_last_event() {
             "abc",
         )
         .unwrap();
+    store.start(&running.id).unwrap();
     std::fs::write(store.paths(&running.id).events, "{\"event\":\"call\",\"turn\":7}\n{\"event\":\"tool\",\"turn\":7,\"name\":\"run\",\"ok\":true,\"ms\":900}\n").unwrap();
 
     let (code, events, _) = ork(&ws, &["status", &format!("ork/{}", running.id)]).await;
@@ -526,7 +527,7 @@ fn a_running_job_whose_heartbeat_went_quiet_is_reported_stopped() {
             "abc123",
         )
         .unwrap();
-    assert_eq!(store.load(&fresh.id).unwrap().status, JobStatus::Running);
+    assert_eq!(store.load(&fresh.id).unwrap().status, JobStatus::Queued);
 
     let id = quiet_job(&store);
     let state = store.load(&id).unwrap();

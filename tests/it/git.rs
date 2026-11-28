@@ -274,7 +274,7 @@ fn the_job_store_keeps_state_order_and_report() {
     std::thread::sleep(std::time::Duration::from_millis(5));
     let second = store.create(&order(), "abc123").unwrap();
 
-    assert_eq!(first.status, JobStatus::Running);
+    assert_eq!(first.status, JobStatus::Queued, "a new job waits to start");
     assert_eq!(first.branch, format!("ork/{}", first.id));
     assert_eq!(first.worktree, format!(".ork/worktrees/{}", first.id));
     assert_eq!(store.load(&first.id).unwrap(), first);

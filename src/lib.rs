@@ -21,3 +21,4 @@ pub mod stats;
 pub mod text;
 pub mod tools;
 pub mod tui;
+pub mod work;

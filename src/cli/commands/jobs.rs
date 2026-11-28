@@ -92,7 +92,7 @@ pub async fn status(ctx: &CliContext, args: JobArg) -> anyhow::Result<CommandRes
     let report = store.load_report(id)?;
 
     let mut data = json!({ "state": state });
-    if state.status == JobStatus::Running
+    if state.status.is_live()
         && let Some(last) = last_event(&store, id)
     {
         data["last_event"] = last;
@@ -294,7 +294,12 @@ pub async fn apply(ctx: &CliContext, args: ApplyArgs) -> anyhow::Result<CommandR
 /// `ork discard JOB`: drop the worktree and the branch. Safe to repeat.
 pub async fn discard(ctx: &CliContext, args: JobArg) -> anyhow::Result<CommandResult> {
     let (git, root, store) = open(ctx).await?;
-    let state = store.load(job_id(&args.job))?;
+    let id = job_id(&args.job);
+    // A job still going is stopped first: its worktree can't go from under a running grunt.
+    if store.load(id)?.status.is_live() {
+        stop(ctx, &store, id).await?;
+    }
+    let state = store.load(id)?;
     if state.status == JobStatus::Applied {
         bail!(
             "job {} was applied already; there's nothing to discard",
@@ -310,6 +315,50 @@ pub async fn discard(ctx: &CliContext, args: JobArg) -> anyhow::Result<CommandRe
     store.set_status(&state.id, JobStatus::Discarded, state.reason.clone())?;
     ctx.say(&format!("{} discarded", state.id));
     Ok(CommandResult::ok_with(json!({ "job": state.id })))
+}
+
+/// `ork cancel JOB`: stop a queued or running job. It ends as `error`, reason `cancelled`, its
+/// work kept on its branch.
+pub async fn cancel(ctx: &CliContext, args: JobArg) -> anyhow::Result<CommandResult> {
+    let (_, _, store) = open(ctx).await?;
+    let id = job_id(&args.job);
+    let raw = store.load_raw(id)?;
+    let state = store.load(id)?;
+    if !raw.status.is_live() {
+        ctx.say(&format!("{id} already ended: {}", raw.status.as_str()));
+        return Ok(CommandResult::ok_with(json!({ "job": id, "state": raw })));
+    }
+    if !state.status.is_live() {
+        // Its process is gone (no heartbeat): write down what the readers already say, so
+        // `discard` can clean it up.
+        let state = store.set_status(id, JobStatus::Error, state.reason.clone())?;
+        ctx.say(&format!("{id} had stopped already; marked as error"));
+        return Ok(CommandResult::ok_with(json!({ "job": id, "state": state })));
+    }
+    let state = stop(ctx, &store, id).await?;
+    ctx.say(&format!("{id} cancelled"));
+    Ok(CommandResult::ok_with(json!({ "job": id, "state": state })))
+}
+
+/// Asks a live job to stop and waits (up to 30 s) until it says it has.
+async fn stop(ctx: &CliContext, store: &JobStore, id: &str) -> anyhow::Result<JobState> {
+    store.request_cancel(id)?;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let state = store.load(id)?;
+        if !state.status.is_live() {
+            return Ok(state);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            bail!(
+                "{id} didn't stop within 30 s; if its ork process is gone, it reads as stopped once its \n                 heartbeat is 90 s old (then ork cancel {id} again)"
+            );
+        }
+        tokio::select! {
+            _ = ctx.cancel.cancelled() => bail!("cancelled"),
+            _ = tokio::time::sleep(std::time::Duration::from_millis(200)) => {}
+        }
+    }
 }
 
 /// A read-only job (`--readonly`): nothing to diff or apply; its worktree is gone when it ends.

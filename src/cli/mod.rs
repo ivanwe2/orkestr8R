@@ -63,6 +63,8 @@ pub enum Commands {
     Apply(commands::jobs::ApplyArgs),
     /// Drop the worktree and the branch
     Discard(commands::jobs::JobArg),
+    /// Stop a queued or running job (it ends as error, reason cancelled; its work is kept)
+    Cancel(commands::jobs::JobArg),
     /// The guide for AI agents: when to delegate, the order, reading the report
     Guide,
     /// The skill that teaches your agent to delegate: install it for Claude Code, OpenCode, …
@@ -182,6 +184,7 @@ pub async fn run(
         Commands::Logs(args) => complete(&ctx, commands::jobs::logs(&ctx, args)).await,
         Commands::Apply(args) => complete(&ctx, commands::jobs::apply(&ctx, args)).await,
         Commands::Discard(args) => complete(&ctx, commands::jobs::discard(&ctx, args)).await,
+        Commands::Cancel(args) => complete(&ctx, commands::jobs::cancel(&ctx, args)).await,
         Commands::Guide => complete(&ctx, commands::guide::run(&ctx)).await,
         Commands::Skill(args) => complete(&ctx, commands::skill::run(&ctx, args)).await,
         Commands::Tui => complete(&ctx, commands::tui::run(&ctx)).await,

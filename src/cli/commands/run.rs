@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{Context, bail};
 use clap::Args;
 
-use crate::cli::{CliContext, CommandResult, exit};
+use crate::cli::{CliContext, CommandResult};
 use crate::config;
 use crate::events::{CompositeSink, EventSink, FileSink, OrkEvent};
 use crate::git::Git;
@@ -15,7 +15,7 @@ use crate::jobs::JobStore;
 use crate::model::ModelClient;
 use crate::orders::{self, JobStatus, Order, OrderMode, Report};
 use crate::process::{CommandPolicy, ProcessRunner};
-use crate::runs::RunService;
+use crate::work;
 
 #[derive(Debug, Args)]
 pub struct RunArgs {
@@ -97,7 +97,7 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
     if !problems.is_empty() {
         bail!("the order has problems:\n  {}", problems.join("\n  "));
     }
-    let (client, role) = ModelClient::for_role(config, &role_name, &ctx.env)?;
+    let (client, _) = ModelClient::for_role(config, &role_name, &ctx.env)?;
 
     // 3. The job and its worktree, from HEAD.
     let mut warnings: Vec<(&str, String)> = loaded
@@ -145,37 +145,20 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
         });
     }
 
-    // 5. The run, with a heartbeat while it lasts: readers tell a live run from one whose process
-    // died (the job would otherwise stay `running` forever).
-    let _heartbeat = {
-        let (store, id) = (store.clone(), job.id.clone());
-        AbortOnDrop(tokio::spawn(async move {
-            let mut tick = tokio::time::interval(crate::jobs::BEAT);
-            loop {
-                tick.tick().await;
-                let _ = store.beat(&id);
-            }
-        }))
-    };
-    let service = RunService {
-        model: &client,
+    // 5. The run: the same path a background worker takes (src/work.rs), with the events also
+    // going to the caller.
+    let result = work::run_job(
+        &store,
+        &job.id,
         config,
-        role,
-        role_name: &role_name,
-        env: &ctx.env,
-        events: &events,
-    };
-    let report = match service.run(&order, &job, &store, ctx.cancel.clone()).await {
-        Ok(report) => report,
-        Err(err) => {
-            let _ = store.set_status(&job.id, JobStatus::Error, Some(format!("{err:#}")));
-            return Err(err);
-        }
-    };
-
-    print_summary(ctx, &report, order.mode == OrderMode::Readonly);
-    let result = result_for(&report);
-    file.emit(&result.clone().into_event());
+        &ctx.env,
+        Some(ctx.events.clone()),
+        ctx.cancel.clone(),
+    )
+    .await;
+    if let Some(report) = &result.report {
+        print_summary(ctx, report, order.mode == OrderMode::Readonly);
+    }
     Ok(result)
 }
 
@@ -234,27 +217,6 @@ fn build_order(ctx: &CliContext, args: &RunArgs, root: &Path) -> anyhow::Result<
     Ok(order)
 }
 
-/// passed → 0; failed_checks or gave_up → 4; error → 1.
-fn result_for(report: &Report) -> CommandResult {
-    let code = match report.status {
-        JobStatus::FailedChecks | JobStatus::GaveUp => exit::CHECKS_FAILED,
-        JobStatus::Error => exit::ERROR,
-        _ => exit::OK,
-    };
-    let mut result = CommandResult::new(report.status.as_str(), code);
-    result.job = Some(report.job.clone());
-    result.report = Some(report.clone());
-    if report.status == JobStatus::Error {
-        result.error = Some(
-            report
-                .reason
-                .clone()
-                .unwrap_or_else(|| "the run failed".into()),
-        );
-    }
-    result
-}
-
 /// The report for people, on stdout (progress went to stderr as it happened).
 fn print_summary(ctx: &CliContext, report: &Report, readonly: bool) {
     let id = &report.job;
@@ -302,14 +264,5 @@ fn print_summary(ctx: &CliContext, report: &Report, readonly: bool) {
         ctx.say(&format!(
             "next: ork diff {id} · ork logs {id} · ork discard {id}"
         ));
-    }
-}
-
-/// Stops a background task when it goes out of scope, however the scope ends.
-struct AbortOnDrop(tokio::task::JoinHandle<()>);
-
-impl Drop for AbortOnDrop {
-    fn drop(&mut self) {
-        self.0.abort();
     }
 }
