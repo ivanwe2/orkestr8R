@@ -76,6 +76,14 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
     }
     let policy = CommandPolicy::new(&config.allow_commands);
     let mut problems = orders::validate(&order, &root, &policy);
+    let secrets = crate::secrets::Secrets::new(&config.secrets.deny, &config.secrets.allow)?;
+    for path in &order.paths {
+        if secrets.is_secret(path) {
+            problems.push(format!(
+                "paths: {path} is a secret file: ork doesn't show secrets to the model"
+            ));
+        }
+    }
     let role_name = order.role_name().to_string();
     if !config.roles.contains_key(&role_name) {
         let roles: Vec<&str> = config.roles.keys().map(String::as_str).collect();
@@ -103,7 +111,7 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
     let mut warnings: Vec<(&str, String)> = loaded
         .warnings
         .iter()
-        .map(|w| ("key_ignored", w.clone()))
+        .map(|w| (config::warning_code(w), w.clone()))
         .collect();
     if !git.is_clean(&root).await? {
         warnings.push((

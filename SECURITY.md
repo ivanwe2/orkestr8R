@@ -22,15 +22,21 @@ orkestr8R runs a model's tool calls and your checks on your machine, so it's wor
   paths), no API keys or tokens.
 - Send an API key only to a server whose URL and key variable your own user config names, so a
   cloned repo's `ork.json` can't redirect it.
+- Keep secret files from the model: the tools never read, write or grep `.env` files (not
+  `.env.example`), private keys (`*.pem`, `*.key`, `id_rsa`, …), `.npmrc`, `.netrc`, `.pgpass`,
+  `.git-credentials` or `*.tfvars`, however a path or a link leads there. Your config can add
+  patterns (`secrets.deny`); only your own file can make exceptions (`secrets.allow`), so a repo can
+  tighten the list but not loosen it. The same goes for `extra_body`, which is sent with your key.
 - Check job ids and job files before they reach a path or a git argument, and escape control
   characters in everything shown in your terminal.
 
 **It doesn't:**
 - **Sandbox anything.** The command allow-list stops accidents (`git push`, `rm`), not a hostile
   model: allowed commands have flags that run other programs, and every check runs code the grunt
-  wrote. A process started by a check can do whatever your user account can.
+  wrote. A process started by a check can do whatever your user account can. That includes reading the secret
+  files the tools refuse: the guard covers the model's tools, not the commands it runs.
 - Make an untrusted repo safe. Its build and its tests run, and so does its `ork.json`'s
   allow-list.
 
 So: use orkestr8R on code whose tests you'd run yourself. OS-level isolation (bubblewrap on Linux)
-is planned for v0.3.
+is planned for a later release (#20).

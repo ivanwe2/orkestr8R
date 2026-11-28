@@ -62,7 +62,8 @@ to `ork run - --json`: no quoting trouble with long goals (PowerShell), and no t
 - `context`: constraints, conventions, names to use. The grunt knows only the repo and this order.
 - `paths` (`--path`): files to show it up front, relative to where you are or to the repo root
   (stored relative to the root; in an order file, relative to the root). Saves it turns.
-  `--scope` globs are always relative to the repo root.
+  `--scope` globs are always relative to the repo root. Secret files (`.env`, keys, `.npmrc`) are
+  refused here and by the grunt's tools.
 - `write_scope` (`--scope`): globs of the files it may change. Every other write is refused.
 - `checks` (`--check`): commands that must exit 0. Each must be allowed (`ork doctor` lists the
   commands: the repo's `ork.json` `allow_commands`, else the ones its build files imply, like a

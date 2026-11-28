@@ -6,17 +6,21 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::Context;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 
+use crate::secrets::Secrets;
+
 #[derive(Debug, Clone)]
 pub struct PathGuard {
     /// The worktree, canonical.
     root: PathBuf,
     scope: GlobSet,
     scope_patterns: Vec<String>,
+    /// Files never read or written (`.env`, keys): see src/secrets.rs.
+    secrets: Secrets,
 }
 
 impl PathGuard {
     /// `root` is the worktree; `write_scope` holds globs relative to it (`src/**`, `tests/*.rs`).
-    pub fn new(root: &Path, write_scope: &[String]) -> anyhow::Result<Self> {
+    pub fn new(root: &Path, write_scope: &[String], secrets: Secrets) -> anyhow::Result<Self> {
         let root = dunce::canonicalize(root)
             .with_context(|| format!("{} doesn't exist", root.display()))?;
         let mut builder = GlobSetBuilder::new();
@@ -33,6 +37,7 @@ impl PathGuard {
             root,
             scope: builder.build()?,
             scope_patterns: write_scope.to_vec(),
+            secrets,
         })
     }
 
@@ -94,9 +99,16 @@ impl PathGuard {
             return Err(format!("refused: {shown} leads into .git through a link"));
         }
 
-        // 3. Writes must also be in scope.
+        // 3. Secret files are never read or written, whatever path or link leads to them.
+        let rel_slash = to_slash(&inside);
+        if self.secrets.is_secret(&rel_slash) {
+            return Err(format!(
+                "refused: {shown} is a secret file: ork doesn't show secrets to the model"
+            ));
+        }
+
+        // 4. Writes must also be in scope.
         if write {
-            let rel_slash = to_slash(&inside);
             if self.scope_patterns.is_empty() {
                 return Err(format!(
                     "refused: {shown}: this order may not change any files"
@@ -110,6 +122,11 @@ impl PathGuard {
             }
         }
         Ok(real)
+    }
+
+    /// Whether `rel` (relative to the root, with `/`) is a secret file: grep leaves those lines out.
+    pub fn is_secret(&self, rel: &str) -> bool {
+        self.secrets.is_secret(rel)
     }
 
     /// `path` relative to the root, with `/` (for messages and globs).

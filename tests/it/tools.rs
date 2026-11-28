@@ -817,3 +817,106 @@ async fn a_stub_from_the_history_isnt_written_as_a_files_content() {
     assert!(!s.repo.path.join("src/b.rs").exists());
     assert_eq!(s.repo.read("src/a.rs"), "fn a() {}\n");
 }
+
+// secret files
+
+#[tokio::test]
+async fn secret_files_are_never_read_or_written() {
+    let s = Setup::new(
+        &[
+            (".env", "TOKEN=abc\n"),
+            (".env.example", "TOKEN=\n"),
+            ("config/.env.local", "TOKEN=def\n"),
+            ("certs/server.key", "KEY\n"),
+            ("src/a.rs", "fn a() {}\n"),
+        ],
+        &["**"],
+    );
+
+    for path in [".env", "config/.env.local", "certs/server.key"] {
+        let read = s.call("read_file", json!({ "path": path })).await;
+        assert!(!read.ok, "{path}: {}", read.output);
+        assert!(read.output.contains("is a secret file"), "{}", read.output);
+    }
+    let example = s.call("read_file", json!({ "path": ".env.example" })).await;
+    assert!(example.ok, "templates are fine: {}", example.output);
+
+    let write = s
+        .call(
+            "write_file",
+            json!({ "path": "deploy/.env", "content": "X=1\n" }),
+        )
+        .await;
+    assert!(
+        write.output.contains("is a secret file"),
+        "{}",
+        write.output
+    );
+    // list_dir still shows the names: knowing a .env exists isn't the secret
+    let listed = s.call("list_dir", json!({})).await;
+    assert!(listed.output.contains(".env"), "{}", listed.output);
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn a_link_to_a_secret_file_is_refused_too() {
+    let s = Setup::new(
+        &[(".env", "TOKEN=abc\n"), ("src/a.rs", "fn a() {}\n")],
+        &["src/**"],
+    );
+    std::os::unix::fs::symlink(s.repo.path.join(".env"), s.repo.path.join("src/notes.txt"))
+        .unwrap();
+
+    let read = s
+        .call("read_file", json!({ "path": "src/notes.txt" }))
+        .await;
+
+    assert!(read.output.contains("is a secret file"), "{}", read.output);
+}
+
+#[tokio::test]
+async fn grep_leaves_secret_files_out() {
+    let s = Setup::new(
+        &[
+            (".env", "TOKEN=abc\n"),
+            ("src/a.rs", "// TOKEN goes here\n"),
+        ],
+        &["src/**"],
+    );
+
+    let found = s.call("grep", json!({ "pattern": "TOKEN" })).await;
+
+    assert!(found.ok, "{}", found.output);
+    assert!(found.output.contains("src/a.rs"), "{}", found.output);
+    assert!(!found.output.contains("abc"), "{}", found.output);
+}
+
+#[test]
+fn secret_patterns_ignore_case_everywhere() {
+    let secrets = orkestr8r::secrets::Secrets::built_in();
+    assert!(secrets.is_secret(".ENV"));
+    assert!(secrets.is_secret("Config/Server.KEY"));
+    assert!(!secrets.is_secret(".env.EXAMPLE"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn grep_isnt_fooled_by_a_colon_in_a_directory_name() {
+    // `dir:1:x/.env:2:…` could be read as the file `dir`: every reading is checked.
+    let s = Setup::new(
+        &[
+            ("dir:1:x/.env", "TOKEN=abc\nTOKEN=def\n"),
+            ("src/a.rs", "// TOKEN\n"),
+        ],
+        &["src/**"],
+    );
+
+    let found = s.call("grep", json!({ "pattern": "TOKEN" })).await;
+
+    assert!(found.output.contains("src/a.rs"), "{}", found.output);
+    assert!(
+        !found.output.contains("abc") && !found.output.contains("def"),
+        "{}",
+        found.output
+    );
+}

@@ -19,6 +19,17 @@ pub struct OrkConfig {
     pub roles: BTreeMap<String, RoleConfig>,
     pub allow_commands: Vec<String>,
     pub defaults: DefaultsConfig,
+    /// Files the grunt's tools never read or write, beyond the built-in list (src/secrets.rs).
+    pub secrets: SecretsConfig,
+}
+
+/// `deny` adds secret-file patterns (from any config file; they add up); `allow` makes exceptions,
+/// and counts only from your own file.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SecretsConfig {
+    pub deny: Vec<String>,
+    pub allow: Vec<String>,
 }
 
 /// An OpenAI-compatible server. `url` ends in `/v1`.
@@ -139,11 +150,20 @@ pub fn load(cwd: &Path, env: &Env) -> anyhow::Result<LoadedConfig> {
     let mut merged = Value::Object(Default::default());
     let mut trusted = Value::Object(Default::default());
     let mut repo_lists_commands = false;
+    // Secret patterns add up over the files (a merge would let the repo's list replace yours).
+    let mut secret_deny: Vec<String> = Vec::new();
     for (file, is_trusted) in &files {
         let text =
             std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?;
         let value: Value = serde_json::from_str(&text)
             .with_context(|| format!("{} is not valid JSON", file.display()))?;
+        for pattern in value["secrets"]["deny"].as_array().into_iter().flatten() {
+            if let Some(pattern) = pattern.as_str()
+                && !secret_deny.iter().any(|p| p == pattern)
+            {
+                secret_deny.push(pattern.to_string());
+            }
+        }
         if *is_trusted {
             merge(&mut trusted, value.clone());
         } else {
@@ -154,6 +174,7 @@ pub fn load(cwd: &Path, env: &Env) -> anyhow::Result<LoadedConfig> {
     let mut config: OrkConfig =
         serde_json::from_value(merged).context("the config has a value of the wrong type")?;
     let trusted: OrkConfig = serde_json::from_value(trusted).unwrap_or_default();
+    config.secrets.deny = secret_deny;
     let warnings = drop_untrusted_keys(&mut config, &trusted);
 
     // The commands a repo needs come from the repo: its own ork.json when that lists them, else
@@ -214,7 +235,27 @@ fn drop_untrusted_keys(config: &mut OrkConfig, trusted: &OrkConfig) -> Vec<Strin
             ));
         }
     }
+    // Exceptions to the secret files loosen a guard: only your own files make them.
+    if config.secrets.allow != trusted.secrets.allow {
+        config.secrets.allow = trusted.secrets.allow.clone();
+        warnings.push(
+            "secrets.allow: the repo's ork.json can't make exceptions to the secret files; put \
+             them in your user file"
+                .to_string(),
+        );
+    }
     warnings
+}
+
+/// The warning code for one of `load`'s warnings, from the setting it names.
+pub fn warning_code(warning: &str) -> &'static str {
+    if warning.starts_with("secrets.allow") {
+        "allow_ignored"
+    } else if warning.contains(".extra_body") {
+        "extra_body_ignored"
+    } else {
+        "key_ignored"
+    }
 }
 
 /// Deep-merges `overlay` into `base`: objects merge key by key, anything else (arrays included)
@@ -388,6 +429,13 @@ impl OrkConfig {
                     }
                 }
                 Some(_) => problems.push(format!("{path}.extra_body: must be an object")),
+            }
+        }
+        for (key, patterns) in [("deny", &self.secrets.deny), ("allow", &self.secrets.allow)] {
+            for pattern in patterns {
+                if let Err(err) = crate::secrets::check_pattern(pattern) {
+                    problems.push(format!("secrets.{key}: {pattern}: {err}"));
+                }
             }
         }
         for (name, server) in &self.servers {
