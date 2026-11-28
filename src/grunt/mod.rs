@@ -41,6 +41,8 @@ pub const NUDGE_NO_TOOLS: &str = "Use a tool to make progress, or call finish.";
 /// The user message after a reply that hit `max_tokens`.
 pub const NUDGE_CUT_OFF: &str =
     "Your reply was cut off. Keep messages short; one tool call at a time.";
+/// The user message once a job has used 80% of its token budget.
+pub const NUDGE_BUDGET: &str = "You have used 80% of this job's token budget. Finish now: call finish with what you have, or with the question that blocks you.";
 
 /// The grunt called `finish`.
 #[derive(Debug, Clone, PartialEq)]
@@ -102,8 +104,11 @@ pub struct LoopSettings {
     pub max_turns: u32,
     pub max_minutes: u32,
     pub temperature: f64,
+    /// The cap on one reply's output (the role's `max_output_tokens`).
     pub max_tokens: u32,
     pub context_tokens: u32,
+    /// The whole job's budget, tokens in + out over every request; `None` = none.
+    pub token_budget: Option<u64>,
 }
 
 impl LoopSettings {
@@ -116,6 +121,7 @@ impl LoopSettings {
             temperature: role.temperature,
             max_tokens: role.max_output_tokens,
             context_tokens: role.context_tokens,
+            token_budget: order.max_tokens.or(config.defaults.max_tokens),
         }
     }
 }
@@ -167,9 +173,15 @@ impl<'a> GruntLoop<'a> {
         let mut guards = LoopGuards::default();
         let keeper = ContextKeeper::new(self.settings.context_tokens);
         let mut last_prompt_tokens = 0;
+        // The token budget's nudge goes out once, at the start of the turn after it's earned.
+        let (mut budget_nudged, mut nudge_now) = (false, false);
 
         for turn in 1..=self.settings.max_turns {
             tally.turns = turn;
+            if nudge_now {
+                self.push(&mut messages, turn, WireMessage::user(NUDGE_BUDGET));
+                nudge_now = false;
+            }
             // The last reply said how big the prompt was; make room before sending more.
             let stubbed = keeper.shrink(&mut messages, last_prompt_tokens);
             if stubbed > 0 {
@@ -197,6 +209,25 @@ impl<'a> GruntLoop<'a> {
             };
             self.record_reply(turn, &reply, &mut tally);
             last_prompt_tokens = reply.tokens_in;
+            // The token budget: every request resends the whole history, so the total grows faster
+            // than it looks. At 80% the grunt is told to wrap up; at the budget the run stops before
+            // this reply's calls run (the work so far is still committed and reported).
+            if let Some(budget) = self.settings.token_budget {
+                let used = tally.tokens_in + tally.tokens_out;
+                if used >= budget {
+                    self.push(&mut messages, turn, reply.to_message());
+                    return tally.end(LoopEnd::GaveUp, "max_tokens");
+                }
+                if !budget_nudged && used.saturating_mul(5) >= budget.saturating_mul(4) {
+                    (budget_nudged, nudge_now) = (true, true);
+                    self.events.emit(&OrkEvent::Warning {
+                        code: "token_budget".into(),
+                        message: format!(
+                            "{used} of {budget} tokens used: the grunt is told to finish"
+                        ),
+                    });
+                }
+            }
             let cut_off = reply.finish_reason.as_deref() == Some("length");
             if cut_off {
                 self.events.emit(&OrkEvent::Warning {
