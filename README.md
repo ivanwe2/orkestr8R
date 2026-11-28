@@ -35,9 +35,10 @@
 </p>
 
 > [!NOTE]
-> **Status: v0.1 is built and being tried on real work (November 2026).** The first release follows.
-> The plan: [docs/vision.md](docs/vision.md) → [docs/iteration-1.md](docs/iteration-1.md) →
-> [docs/plan-v0.1.md](docs/plan-v0.1.md).
+> **v0.1.0 is out (November 2026):** the CLI, the dashboard and the skill, dogfooded on real work
+> ([docs/dogfood/v0.1.md](docs/dogfood/v0.1.md)). Downloads for Linux and Windows are on the
+> [releases page](https://github.com/ivanwe2/orkestr8R/releases). Next: v0.2 (MCP, background
+> jobs, a model per order); every idea is in [docs/ideas.md](docs/ideas.md).
 
 ## The idea
 

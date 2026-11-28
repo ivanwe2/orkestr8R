@@ -42,7 +42,7 @@ task at a time and finish it without asking.
 - [x] T17 `ork tui`, the live view (added before the release; see T17)
 - [x] T18 `ork skill install`: the skill for the agents you use (added before the release; see T18)
 - [x] T19 The TUI: `ork` alone, `/` commands, the agent picker, a bolder look (added before the release; see T19)
-- [ ] T16 Dogfood and release v0.1.0
+- [x] T16 Dogfood and release v0.1.0 (criterion 4 in part: see docs/dogfood/v0.1.md)
 
 ```mermaid
 flowchart LR
