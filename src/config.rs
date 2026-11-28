@@ -40,6 +40,12 @@ pub struct RoleConfig {
     pub context_tokens: u32,
     pub temperature: f64,
     pub max_output_tokens: u32,
+    /// A reasoning model's thinking: on, off, or `None` (the server's default).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<bool>,
+    /// Merged into every request body last: what a server spells its own way.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_body: Option<Value>,
 }
 
 impl Default for RoleConfig {
@@ -50,6 +56,8 @@ impl Default for RoleConfig {
             context_tokens: 32_768,
             temperature: 0.2,
             max_output_tokens: 8_192,
+            thinking: None,
+            extra_body: None,
         }
     }
 }
@@ -191,6 +199,18 @@ fn drop_untrusted_keys(config: &mut OrkConfig, trusted: &OrkConfig) -> Vec<Strin
             warnings.push(format!(
                 "servers.{name}.key_env: ignored, because the repo's ork.json changes this server; \
                  API keys are only sent to servers your user file defines (ork init --user)"
+            ));
+        }
+    }
+    // `extra_body` goes into every request, sent with your key: a cloned repo could ask for ten
+    // completions at once (`n`), paid plugins or another provider. Only your own files set it.
+    for (name, role) in &mut config.roles {
+        let own = trusted.roles.get(name).and_then(|r| r.extra_body.as_ref());
+        if role.extra_body.is_some() && role.extra_body.as_ref() != own {
+            role.extra_body = own.cloned();
+            warnings.push(format!(
+                "roles.{name}.extra_body: the repo's ork.json can't set it (it's sent with your API \
+                 key); put it in your user file"
             ));
         }
     }
@@ -355,6 +375,19 @@ impl OrkConfig {
             );
             if role.temperature.is_nan() || role.temperature < 0.0 {
                 problems.push(format!("{path}.temperature: must be 0 or more"));
+            }
+            match &role.extra_body {
+                None => {}
+                Some(Value::Object(extra)) => {
+                    for key in ["model", "messages", "tools", "tool_choice", "stream"] {
+                        if extra.contains_key(key) {
+                            problems.push(format!(
+                                "{path}.extra_body.{key}: ork sets that itself; leave it out"
+                            ));
+                        }
+                    }
+                }
+                Some(_) => problems.push(format!("{path}.extra_body: must be an object")),
             }
         }
         for (name, server) in &self.servers {

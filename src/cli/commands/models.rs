@@ -25,6 +25,8 @@ struct RoleLine {
     model: String,
     key_set: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     test: Option<TestResult>,
 }
 
@@ -74,6 +76,11 @@ pub async fn run(ctx: &CliContext, args: ModelsArgs) -> anyhow::Result<CommandRe
             client.base_url(),
             role.model
         );
+        match role.thinking {
+            Some(true) => human += "  thinking on",
+            Some(false) => human += "  thinking off",
+            None => {}
+        }
         match &test {
             Some(TestResult {
                 ok: true,
@@ -102,6 +109,7 @@ pub async fn run(ctx: &CliContext, args: ModelsArgs) -> anyhow::Result<CommandRe
             url: client.base_url().to_string(),
             model: role.model.clone(),
             key_set: client.has_key(),
+            thinking: role.thinking,
             test,
         });
     }

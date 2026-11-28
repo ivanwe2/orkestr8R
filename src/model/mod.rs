@@ -33,6 +33,9 @@ pub struct ModelClient {
     api_key: Option<String>,
     /// How long to wait before each retry; one retry per entry. Tests set these to zero.
     pub retry_delays: Vec<Duration>,
+    /// The role's thinking switch and extra body fields (see `request_body`).
+    thinking: Option<bool>,
+    extra_body: Option<Value>,
 }
 
 impl ModelClient {
@@ -76,6 +79,8 @@ impl ModelClient {
             model: role.model.clone(),
             api_key,
             retry_delays: vec![Duration::from_secs(2), Duration::from_secs(5)],
+            thinking: role.thinking,
+            extra_body: role.extra_body.clone(),
         })
     }
 
@@ -134,7 +139,32 @@ impl ModelClient {
             body["tools"] = json!(tools);
             body["tool_choice"] = json!("auto");
         }
+        // Thinking on or off, in the words the server understands. OpenRouter has its own
+        // `reasoning` object; llama.cpp, llama-swap, vLLM and SGLang pass `chat_template_kwargs`
+        // to the model's chat template (Qwen3's reads `enable_thinking`).
+        if let Some(thinking) = self.thinking {
+            if self.is_openrouter() {
+                body["reasoning"] = if thinking {
+                    json!({ "enabled": true })
+                } else {
+                    json!({ "effort": "none" })
+                };
+            } else {
+                body["chat_template_kwargs"] = json!({ "enable_thinking": thinking });
+            }
+        }
+        // Last, so a role can spell anything its server needs its own way.
+        if let Some(extra) = &self.extra_body {
+            crate::config::merge(&mut body, extra.clone());
+        }
         body
+    }
+
+    fn is_openrouter(&self) -> bool {
+        reqwest::Url::parse(&self.base_url)
+            .ok()
+            .and_then(|url| url.host_str().map(|host| host.ends_with("openrouter.ai")))
+            .unwrap_or(false)
     }
 
     /// Sends a request, retrying what might pass on a second try, and returns the body and how

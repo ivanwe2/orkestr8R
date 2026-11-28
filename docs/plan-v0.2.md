@@ -24,7 +24,7 @@ The same rules as docs/plan-v0.1.md:
 
 - [x] T01 Roles and kinds on the order
 - [x] T02 Token budget · explain
-- [ ] T03 Thinking switch per role
+- [x] T03 Thinking switch per role
 - [ ] T04 Shrink old tool arguments · explain
 - [ ] T05 Secret files guard · explain
 - [ ] T06 Job lifecycle: `queued`, `ork cancel`, one run path · explain
@@ -332,15 +332,16 @@ every request resends the whole history.
 
   | Server | `false` | `true` |
   |---|---|---|
-  | host ends in `openrouter.ai` | `"reasoning": {"enabled": false}` | `"reasoning": {"enabled": true}` |
+  | host ends in `openrouter.ai` | `"reasoning": {"effort": "none"}` | `"reasoning": {"enabled": true}` |
   | anything else (llama.cpp with `--jinja`, llama-swap, vLLM, SGLang) | `"chat_template_kwargs": {"enable_thinking": false}` | `… true` |
 
 - `roles.<name>.extra_body`: an object deep-merged into the request body last (`config::merge`).
   Validation refuses the keys `model`, `messages`, `tools`, `tool_choice` and `stream`. It covers
   templates and servers that spell thinking differently (Ollama, gpt-oss's `reasoning_effort`).
 - `ork models` shows `thinking on/off`.
-- Check OpenRouter's current docs when building this: some models can only hide their reasoning
-  (`exclude`), not skip it.
+- OpenRouter (checked 2026-11-28): `effort: "none"` disables reasoning; `enabled: true` turns it on
+  at medium effort. Models whose reasoning is mandatory reject `none`: give those no `thinking`, or
+  an `extra_body` of their own.
 
 **Tests** (`model.rs`, `config.rs`):
 - the request body for a 127.0.0.1 client and for an `https://openrouter.ai/api/v1` client (built,
