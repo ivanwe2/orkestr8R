@@ -521,6 +521,38 @@ async fn a_readonly_order_is_an_investigation_unless_it_says_otherwise() {
 }
 
 #[tokio::test]
+async fn over_the_token_budget_the_run_gives_up_with_exit_4() {
+    let server = FakeModelServer::start(
+        Script::new()
+            .tool_call("read_file", json!({ "path": "src/calc.rs" }))
+            .tool_call("read_file", json!({ "path": "src/calc.rs" }))
+            .tool_call("read_file", json!({ "path": "src/calc.rs" })),
+    )
+    .await;
+    let ws = workspace(&server);
+
+    let out = run_cli(
+        &run_args(&["--max-tokens", "300", "--json"]),
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::CHECKS_FAILED, "{}", out.stderr);
+    let result = json_lines(&out.stdout).pop().unwrap();
+    assert_eq!(result["status"], "gave_up");
+    assert_eq!(result["report"]["reason"], "max_tokens");
+
+    let zero = run_cli(
+        &run_args(&["--max-tokens", "0", "--json"]),
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+    assert_eq!(zero.code, exit::ERROR);
+}
+
+#[tokio::test]
 async fn a_role_with_thinking_off_says_so_in_every_request() {
     let server = FakeModelServer::start(
         Script::new()

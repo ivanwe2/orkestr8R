@@ -23,7 +23,7 @@ The same rules as docs/plan-v0.1.md:
 ## Progress
 
 - [x] T01 Roles and kinds on the order
-- [ ] T02 Token budget · explain
+- [x] T02 Token budget · explain
 - [x] T03 Thinking switch per role
 - [ ] T04 Shrink old tool arguments · explain
 - [ ] T05 Secret files guard · explain

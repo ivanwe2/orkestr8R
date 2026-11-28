@@ -16,6 +16,7 @@ ork ask "QUESTION" --path FILE [--path …] [--role NAME]
                                            a one-shot, read-only answer from the local model
 ork run [ORDER.json | -] [--goal "…"] [--context "…"] [--path FILE]… [--scope GLOB]… [--check "CMD"]…
         [--readonly] [--role NAME] [--kind KIND] [--max-turns N] [--max-repairs N] [--max-minutes N]
+        [--max-tokens N]
                                            run one order: worktree, grunt loop, checks, report (flags override the file)
 ork jobs                                   every job, newest first
 ork status JOB                             one job: status, the last event while running, the report when done
@@ -126,6 +127,11 @@ examples below leave `ts` out after the first two.
 ```
 
 - **Required:** `goal`; `checks` (at least one) and `write_scope`, unless `mode` is `readonly`.
+- **`max_tokens`** (`--max-tokens`): the job's token budget, tokens in + out over every request,
+  repair turns included; `defaults.max_tokens` in the config when the order has none (no budget
+  when neither does). At 80% the grunt gets one message telling it to finish (a `token_budget`
+  warning); at the budget the run stops before that reply's calls run: `gave_up`, reason
+  `max_tokens`, exit 4.
 - **`role`** (`--role`): the role that runs it, a name in the config's `roles`; `grunt` when left
   out. An unknown role is a problem with the order. `ork models` lists the roles; goblin (small,
   fast), grunt (the big local model) and mercenary (a paid cloud model) are suggested names, not
