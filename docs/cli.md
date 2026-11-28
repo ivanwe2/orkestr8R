@@ -214,7 +214,8 @@ or `~/.config/orkestr8r/ork.json`), then the repo's `ork.json`, each key overrid
     reasoning is mandatory reject `none`); llama.cpp, llama-swap, vLLM and SGLang get
     `chat_template_kwargs: {enable_thinking}`.
   - `extra_body`: an object merged into every request last, for what a server spells its own way
-    (not `model`, `messages`, `tools`, `tool_choice` or `stream`).
+    (not `model`, `messages`, `tools`, `tool_choice` or `stream`). Only your own file (or `ORK_CONFIG`) sets
+    it: it's sent with your API key, so a repo's `ork.json` can't (it's dropped with a warning).
 - `allow_commands`: what checks and the grunt may run (see The order).
 - `defaults`: the limits an order doesn't set; `max_tokens` has no default.
 

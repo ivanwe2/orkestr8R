@@ -202,6 +202,18 @@ fn drop_untrusted_keys(config: &mut OrkConfig, trusted: &OrkConfig) -> Vec<Strin
             ));
         }
     }
+    // `extra_body` goes into every request, sent with your key: a cloned repo could ask for ten
+    // completions at once (`n`), paid plugins or another provider. Only your own files set it.
+    for (name, role) in &mut config.roles {
+        let own = trusted.roles.get(name).and_then(|r| r.extra_body.as_ref());
+        if role.extra_body.is_some() && role.extra_body.as_ref() != own {
+            role.extra_body = own.cloned();
+            warnings.push(format!(
+                "roles.{name}.extra_body: the repo's ork.json can't set it (it's sent with your API \
+                 key); put it in your user file"
+            ));
+        }
+    }
     warnings
 }
 
