@@ -44,7 +44,7 @@ pub enum Commands {
     /// Write ork.json (the repo's, or the user's with --user); add .ork/ to .git/info/exclude
     Init(commands::init::InitArgs),
     /// Is everything in place? Config, git, server, tool calling, allow-listed commands
-    Doctor,
+    Doctor(commands::doctor::DoctorArgs),
     /// Which model does each role, on which server; --test sends a tiny request
     Models(commands::models::ModelsArgs),
     /// A one-shot, read-only answer about files from the local model
@@ -172,7 +172,7 @@ pub async fn run(
     let ctx = CliContext::new(io, cwd, env, cancel, cli.json);
     match command {
         Commands::Init(args) => complete(&ctx, commands::init::run(&ctx, args)).await,
-        Commands::Doctor => complete(&ctx, commands::doctor::run(&ctx)).await,
+        Commands::Doctor(args) => complete(&ctx, commands::doctor::run(&ctx, args)).await,
         Commands::Models(args) => complete(&ctx, commands::models::run(&ctx, args)).await,
         Commands::Ask(args) => complete(&ctx, commands::ask::run(&ctx, args)).await,
         Commands::Run(args) => complete(&ctx, commands::run::run(&ctx, args)).await,

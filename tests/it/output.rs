@@ -49,6 +49,7 @@ fn report() -> Report {
             output: 4_810,
         },
         model: "qwen-27b".into(),
+        role: "grunt".into(),
         branch: "ork/k7f2".into(),
         open_questions: vec![],
         reason: None,

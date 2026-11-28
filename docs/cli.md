@@ -10,11 +10,12 @@ it. Change it in the same PR as the code.
 ```
 ork init --url URL --model MODEL [--key-env VAR] [--context-tokens N] [--user] [--force]
                                            write ork.json (the repo's, or the user's with --user); add .ork/ to .git/info/exclude
-ork doctor                                 is everything in place? (config, git, server, tool calling, allow-listed commands)
+ork doctor [--role NAME]                   is everything in place? (config, git, the role's server and tool calling, allow-listed commands)
 ork models [--test]                        which model does each role, on which server; --test sends a tiny request
-ork ask "QUESTION" --path FILE [--path …]  a one-shot, read-only answer from the local model
+ork ask "QUESTION" --path FILE [--path …] [--role NAME]
+                                           a one-shot, read-only answer from the local model
 ork run [ORDER.json | -] [--goal "…"] [--context "…"] [--path FILE]… [--scope GLOB]… [--check "CMD"]…
-        [--readonly] [--max-turns N] [--max-repairs N] [--max-minutes N]
+        [--readonly] [--role NAME] [--kind KIND] [--max-turns N] [--max-repairs N] [--max-minutes N]
                                            run one order: worktree, grunt loop, checks, report (flags override the file)
 ork jobs                                   every job, newest first
 ork status JOB                             one job: status, the last event while running, the report when done
@@ -118,11 +119,20 @@ examples below leave `ts` out after the first two.
   "mode": "write",
   "max_turns": 40,
   "max_repairs": 2,
-  "max_minutes": 20
+  "max_minutes": 20,
+  "role": "grunt",
+  "kind": "feature"
 }
 ```
 
 - **Required:** `goal`; `checks` (at least one) and `write_scope`, unless `mode` is `readonly`.
+- **`role`** (`--role`): the role that runs it, a name in the config's `roles`; `grunt` when left
+  out. An unknown role is a problem with the order. `ork models` lists the roles; goblin (small,
+  fast), grunt (the big local model) and mercenary (a paid cloud model) are suggested names, not
+  built in. The job's `state.json` records the role and the model and server it resolved to, and the
+  report says `role`.
+- **`kind`** (`--kind`): what kind of work it is, for the scoreboard (v0.2): `test`, `fix`, `feature`,
+  `refactor`, `docs`, `chore` or `investigate` (a read-only order's default). Never sent to the model.
 - The limits are optional; the config's defaults fill them in.
 - Every check must pass the command allow-list. A repo's `ork.json` that lists `allow_commands`
   sets it (replacing the user file's). Otherwise it's the user file's plus the commands the repo's

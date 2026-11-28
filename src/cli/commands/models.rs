@@ -18,6 +18,8 @@ pub struct ModelsArgs {
 #[derive(Debug, Serialize)]
 struct RoleLine {
     role: String,
+    /// The role an order runs on when it names none.
+    default: bool,
     server: String,
     url: String,
     model: String,
@@ -64,8 +66,10 @@ pub async fn run(ctx: &CliContext, args: ModelsArgs) -> anyhow::Result<CommandRe
             Some(var) => format!("key: {var} (NOT set)"),
             None => "no key".to_string(),
         };
+        let default = name == crate::orders::DEFAULT_ROLE;
         let mut human = format!(
-            "{name}  {}  {}  {}  {key}",
+            "{name}{}  {}  {}  {}  {key}",
+            if default { " (default)" } else { "" },
             role.server,
             client.base_url(),
             role.model
@@ -93,6 +97,7 @@ pub async fn run(ctx: &CliContext, args: ModelsArgs) -> anyhow::Result<CommandRe
 
         lines.push(RoleLine {
             role: name.clone(),
+            default,
             server: role.server.clone(),
             url: client.base_url().to_string(),
             model: role.model.clone(),

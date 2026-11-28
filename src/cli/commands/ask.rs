@@ -26,6 +26,9 @@ pub struct AskArgs {
     /// A file to ask about, relative to where you are or to the repo root (repeat for more)
     #[arg(long = "path", required = true)]
     pub paths: Vec<PathBuf>,
+    /// The role that answers, a name in the config's roles (default: grunt)
+    #[arg(long, default_value = "grunt")]
+    pub role: String,
 }
 
 pub async fn run(ctx: &CliContext, args: AskArgs) -> anyhow::Result<CommandResult> {
@@ -52,7 +55,7 @@ pub async fn run(ctx: &CliContext, args: AskArgs) -> anyhow::Result<CommandResul
     }
 
     let loaded = load_config(ctx)?;
-    let (client, role) = ModelClient::for_role(&loaded.config, "grunt", &ctx.env)?;
+    let (client, role) = ModelClient::for_role(&loaded.config, &args.role, &ctx.env)?;
 
     let (prompt, truncated) = render(&args.question, &files)?;
     if !truncated.is_empty() {

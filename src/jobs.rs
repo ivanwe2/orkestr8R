@@ -56,6 +56,13 @@ pub struct JobState {
     pub finished_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// The role that runs it, and its model and server, as resolved when the job was made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
 }
 
 /// The files of one job.
@@ -111,6 +118,16 @@ impl JobStore {
 
     /// A new job: picks an id, writes `order.json` and `state.json` (status `running`).
     pub fn create(&self, order: &Order, base_sha: &str) -> anyhow::Result<JobState> {
+        self.create_on(order, base_sha, None)
+    }
+
+    /// The same, recording the model and server (`(model, server)`) the order's role resolved to.
+    pub fn create_on(
+        &self,
+        order: &Order,
+        base_sha: &str,
+        model: Option<(&str, &str)>,
+    ) -> anyhow::Result<JobState> {
         let id = new_job_id(|id| self.jobs_dir().join(id).exists());
         let paths = self.paths(&id);
         std::fs::create_dir_all(&paths.dir)
@@ -128,6 +145,9 @@ impl JobStore {
             updated_at: now,
             finished_at: None,
             reason: None,
+            role: Some(order.role_name().to_string()),
+            model: model.map(|(model, _)| model.to_string()),
+            server: model.map(|(_, server)| server.to_string()),
             id,
         };
         write_atomic(&paths.state, &serde_json::to_vec_pretty(&state)?)?;

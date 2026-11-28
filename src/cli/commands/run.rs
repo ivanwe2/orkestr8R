@@ -41,6 +41,13 @@ pub struct RunArgs {
     /// An investigation: no writing tools; the answer comes back in the summary
     #[arg(long)]
     pub readonly: bool,
+    /// The role that runs it, a name in the config's roles (default: grunt); `ork models` lists them
+    #[arg(long)]
+    pub role: Option<String>,
+    /// What kind of work it is, for the scoreboard: test, fix, feature, refactor, docs, chore,
+    /// investigate
+    #[arg(long)]
+    pub kind: Option<String>,
     #[arg(long)]
     pub max_turns: Option<u32>,
     #[arg(long)]
@@ -59,12 +66,21 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
     if !problems.is_empty() {
         bail!("the config has problems:\n  {}", problems.join("\n  "));
     }
-    let (client, role) = ModelClient::for_role(config, "grunt", &ctx.env)?;
-
     // 2. The order: every problem at once.
-    let order = build_order(ctx, &args, &root)?;
+    let mut order = build_order(ctx, &args, &root)?;
+    if order.kind.is_none() && order.mode == OrderMode::Readonly {
+        order.kind = Some("investigate".into());
+    }
     let policy = CommandPolicy::new(&config.allow_commands);
     let mut problems = orders::validate(&order, &root, &policy);
+    let role_name = order.role_name().to_string();
+    if !config.roles.contains_key(&role_name) {
+        let roles: Vec<&str> = config.roles.keys().map(String::as_str).collect();
+        problems.push(format!(
+            "role: \"{role_name}\" isn't in roles ({})",
+            roles.join(", ")
+        ));
+    }
     // A check that can't start would only show up after the whole run: find its program now,
     // the way the run will (PATH, PATHEXT on Windows).
     let runner = ProcessRunner::new(ctx.env.clone());
@@ -78,6 +94,7 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
     if !problems.is_empty() {
         bail!("the order has problems:\n  {}", problems.join("\n  "));
     }
+    let (client, role) = ModelClient::for_role(config, &role_name, &ctx.env)?;
 
     // 3. The job and its worktree, from HEAD.
     let mut warnings: Vec<(&str, String)> = loaded
@@ -97,7 +114,7 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
         .await
         .context("the repository has no commits yet")?;
     let store = JobStore::new(&root);
-    let job = store.create(&order, &base)?;
+    let job = store.create_on(&order, &base, Some((client.model(), client.server_name())))?;
     if let Err(err) = git
         .worktree_add(&root, &store.worktree_path(&job.id), &job.branch, &base)
         .await
@@ -114,7 +131,7 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
         job: Some(job.id.clone()),
         branch: Some(job.branch.clone()),
         worktree: Some(job.worktree.clone()),
-        role: Some("grunt".into()),
+        role: Some(role_name.clone()),
         model: Some(client.model().into()),
         server: Some(client.server_name().into()),
     });
@@ -141,6 +158,7 @@ pub async fn run(ctx: &CliContext, args: RunArgs) -> anyhow::Result<CommandResul
         model: &client,
         config,
         role,
+        role_name: &role_name,
         env: &ctx.env,
         events: &events,
     };
@@ -199,6 +217,12 @@ fn build_order(ctx: &CliContext, args: &RunArgs, root: &Path) -> anyhow::Result<
     }
     if args.readonly {
         order.mode = OrderMode::Readonly;
+    }
+    if let Some(role) = &args.role {
+        order.role = Some(role.clone());
+    }
+    if let Some(kind) = &args.kind {
+        order.kind = Some(kind.clone());
     }
     order.max_turns = args.max_turns.or(order.max_turns);
     order.max_repairs = args.max_repairs.or(order.max_repairs);

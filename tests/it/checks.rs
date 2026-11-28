@@ -75,6 +75,7 @@ async fn run_job(script: Script, order: Order) -> JobRun {
         model: &client,
         config: &config,
         role: &role,
+        role_name: "grunt",
         env: &env,
         events: &sink,
     };
