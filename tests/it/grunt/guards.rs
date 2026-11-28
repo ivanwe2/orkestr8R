@@ -244,7 +244,7 @@ mod context_keeper {
         let mut messages = conversation(&[1000; 6]);
         let before = messages.clone();
 
-        assert_eq!(ContextKeeper::new(1000).shrink(&mut messages, 750), 0);
+        assert!(!ContextKeeper::new(1000).shrink(&mut messages, 750).any());
         assert_eq!(messages, before);
     }
 
@@ -252,9 +252,9 @@ mod context_keeper {
     fn the_oldest_go_first_and_the_newest_four_stay() {
         let mut messages = conversation(&[1000; 6]);
 
-        let stubbed = ContextKeeper::new(1000).shrink(&mut messages, 900);
+        let shrunk = ContextKeeper::new(1000).shrink(&mut messages, 900);
 
-        assert_eq!(stubbed, 2, "only two are old enough");
+        assert_eq!(shrunk.outputs, 2, "only two are old enough");
         let tools = contents(&messages);
         assert_eq!(
             tools[0],
@@ -273,9 +273,115 @@ mod context_keeper {
         // one huge old output and small ones: stubbing the huge one is enough
         let mut messages = conversation(&[10_000, 100, 100, 100, 100, 100]);
 
-        let stubbed = ContextKeeper::new(4000).shrink(&mut messages, 3500);
+        let shrunk = ContextKeeper::new(4000).shrink(&mut messages, 3500);
 
-        assert_eq!(stubbed, 1);
+        assert_eq!(shrunk.outputs, 1);
         assert_eq!(contents(&messages)[1].len(), 100);
+    }
+
+    /// `n` turns that each wrote a file of `len` characters, with a short result.
+    fn writes(n: usize, len: usize) -> Vec<WireMessage> {
+        let mut messages = vec![
+            WireMessage::system("system"),
+            WireMessage::user("x".repeat(100)),
+        ];
+        for i in 0..n {
+            let id = format!("call_{i}");
+            let arguments =
+                serde_json::json!({ "path": format!("src/f{i}.rs"), "content": "c".repeat(len) });
+            messages.push(WireMessage {
+                role: "assistant".into(),
+                content: None,
+                tool_calls: Some(vec![WireToolCall {
+                    id: id.clone(),
+                    kind: "function".into(),
+                    function: WireFunctionCall {
+                        name: "write_file".into(),
+                        arguments: arguments.to_string(),
+                    },
+                }]),
+                tool_call_id: None,
+            });
+            messages.push(WireMessage::tool(id, "wrote 40 lines"));
+        }
+        messages
+    }
+
+    fn arguments(messages: &[WireMessage]) -> Vec<String> {
+        messages
+            .iter()
+            .flat_map(|m| m.tool_calls.iter().flatten())
+            .map(|c| c.function.arguments.clone())
+            .collect()
+    }
+
+    #[test]
+    fn old_long_arguments_are_stubbed_and_stay_valid_json() {
+        let mut messages = writes(6, 3000);
+        let ids_before: Vec<String> = messages
+            .iter()
+            .filter_map(|m| m.tool_call_id.clone())
+            .collect();
+
+        let shrunk = ContextKeeper::new(5000).shrink(&mut messages, 4500);
+
+        assert_eq!(
+            shrunk.arguments, 2,
+            "only the two older than the newest four"
+        );
+        let args = arguments(&messages);
+        for (i, arguments) in args.iter().enumerate() {
+            let value: serde_json::Value =
+                serde_json::from_str(arguments).unwrap_or_else(|e| panic!("call {i}: {e}"));
+            assert_eq!(
+                value["path"],
+                format!("src/f{i}.rs"),
+                "short arguments stay"
+            );
+        }
+        let first: serde_json::Value = serde_json::from_str(&args[0]).unwrap();
+        assert_eq!(
+            first["content"],
+            "[3000 chars removed from the history to save context]"
+        );
+        let newest: serde_json::Value = serde_json::from_str(&args[5]).unwrap();
+        assert_eq!(newest["content"].as_str().unwrap().len(), 3000);
+        // nothing removed: every result still answers its call, by the same id
+        let ids_after: Vec<String> = messages
+            .iter()
+            .filter_map(|m| m.tool_call_id.clone())
+            .collect();
+        assert_eq!(ids_before, ids_after);
+        for message in messages.iter().filter(|m| m.role == "tool") {
+            let id = message.tool_call_id.as_ref().unwrap();
+            assert!(
+                messages
+                    .iter()
+                    .flat_map(|m| m.tool_calls.iter().flatten())
+                    .any(|c| &c.id == id)
+            );
+        }
+        assert_eq!(messages[0].content.as_deref(), Some("system"));
+        assert_eq!(
+            messages[1].content.as_deref(),
+            Some("x".repeat(100).as_str())
+        );
+    }
+
+    #[test]
+    fn broken_long_arguments_become_a_small_valid_object() {
+        let mut messages = writes(6, 3000);
+        if let Some(calls) = messages[2].tool_calls.as_mut() {
+            calls[0].function.arguments =
+                format!("{{\"path\": \"x\", \"content\": \"{}", "c".repeat(500));
+        }
+
+        ContextKeeper::new(5000).shrink(&mut messages, 4500);
+
+        let value: serde_json::Value = serde_json::from_str(&arguments(&messages)[0]).unwrap();
+        assert_eq!(
+            value["removed"], "526 chars",
+            "26 characters of broken JSON before the 500"
+        );
     }
 }

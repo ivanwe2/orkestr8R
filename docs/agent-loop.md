@@ -126,7 +126,7 @@ and more) splits a harness into seven parts. Where orkestr8R's grunt stands in i
 | Agent loop | model ↔ tools, stop conditions, recovery | the loop above; limits on turns, tokens, minutes; gives up after repeated malformed calls |
 | LLM integration | the API, the prompt, reasoning settings | raw HTTP to an OpenAI-compatible server; low temperature; `<think>` blocks stripped |
 | Tools and actions | what the model can do; file editing matters most | read, list, grep, write, edit (exact match), run, finish |
-| Memory and context | what fits in the window | capped reads, truncated outputs, old outputs stubbed |
+| Memory and context | what fits in the window | capped reads, truncated outputs, old outputs and old long arguments stubbed |
 | Safety and permissions | what may run, isolation | worktree, path guard, `write_scope`, allow-listed commands, scrubbed env |
 | Orchestration | sub-agents | none inside the grunt; orkestr8R itself is the orchestrator |
 | Extensibility | config, hooks, skills, MCP | `ork.json` now; skills for grunts later |
@@ -147,6 +147,7 @@ Two findings from that study worth keeping in mind:
 | Loops: the same call again and again | detect identical consecutive calls, nudge, then stop |
 | Says "done" without testing | `finish` doesn't end the job; the checks do |
 | Huge outputs (a test run, a big file) blow the context | head + tail truncation, capped reads, stubs for old outputs |
+| A written file sits in the history twice (the call's arguments and later reads) and is resent every turn | old `write_file` / `edit_file` arguments over 200 characters stubbed past 75% of the window (JSON kept valid, ids paired); a write that copies a stub is refused |
 | Wanders outside the task | `write_scope`, a turn limit, and a plain prompt that names the goal and the checks |
 
 ## Learning path

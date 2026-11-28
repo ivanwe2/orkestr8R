@@ -183,11 +183,14 @@ impl<'a> GruntLoop<'a> {
                 nudge_now = false;
             }
             // The last reply said how big the prompt was; make room before sending more.
-            let stubbed = keeper.shrink(&mut messages, last_prompt_tokens);
-            if stubbed > 0 {
+            let shrunk = keeper.shrink(&mut messages, last_prompt_tokens);
+            if shrunk.any() {
                 self.events.emit(&OrkEvent::Warning {
                     code: "context_stubbed".into(),
-                    message: format!("replaced {stubbed} old tool outputs with stubs to stay in the context window"),
+                    message: format!(
+                        "replaced {} old tool outputs and {} old arguments with stubs to stay in the context window",
+                        shrunk.outputs, shrunk.arguments
+                    ),
                 });
             }
             let request = ChatRequest {
