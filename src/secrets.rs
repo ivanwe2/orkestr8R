@@ -4,12 +4,12 @@
 //! (`secrets.allow`) count only from your own config.
 //!
 //! It guards the tools, not commands: `run` and the checks execute programs, and a program can read
-//! anything. That needs a sandbox (#20).
+//! anything. That needs a sandbox (#20). Matching ignores case everywhere.
 
 use anyhow::Context;
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 
-/// Always secret. A pattern without `/` matches the file name at any depth.
+/// Always secret. A pattern without `/` matches the file name at any depth; case is ignored.
 pub const BUILT_IN: &[&str] = &[
     ".env",
     ".env.*",
@@ -86,8 +86,10 @@ fn glob(pattern: &str) -> Result<globset::Glob, globset::Error> {
     } else {
         format!("**/{pattern}")
     };
+    // Always case-insensitive: Windows and macOS file systems ignore case, and a false positive
+    // only refuses a file.
     GlobBuilder::new(&pattern)
         .literal_separator(true)
-        .case_insensitive(cfg!(windows))
+        .case_insensitive(true)
         .build()
 }

@@ -607,3 +607,24 @@ async fn a_secret_file_cant_be_shown_to_the_grunt() {
     assert_eq!(ask.code, exit::ERROR);
     assert!(server.requests().is_empty(), "nothing sent to the model");
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn ask_judges_a_link_by_where_it_leads() {
+    let server = FakeModelServer::start(Script::new()).await;
+    let ws = workspace(&server);
+    // A harmless-looking link inside the repo to a .env outside it.
+    let outside = ws.dir().join(".env");
+    std::fs::write(&outside, "TOKEN=abc\n").unwrap();
+    std::os::unix::fs::symlink(&outside, ws.repo.join("notes.txt")).unwrap();
+
+    let ask = run_cli(
+        &["ask", "?", "--path", "notes.txt", "--json"],
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+
+    assert_eq!(ask.code, exit::ERROR);
+    assert!(server.requests().is_empty(), "nothing sent to the model");
+}

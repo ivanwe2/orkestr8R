@@ -890,3 +890,33 @@ async fn grep_leaves_secret_files_out() {
     assert!(found.output.contains("src/a.rs"), "{}", found.output);
     assert!(!found.output.contains("abc"), "{}", found.output);
 }
+
+#[test]
+fn secret_patterns_ignore_case_everywhere() {
+    let secrets = orkestr8r::secrets::Secrets::built_in();
+    assert!(secrets.is_secret(".ENV"));
+    assert!(secrets.is_secret("Config/Server.KEY"));
+    assert!(!secrets.is_secret(".env.EXAMPLE"));
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn grep_isnt_fooled_by_a_colon_in_a_directory_name() {
+    // `dir:1:x/.env:2:…` could be read as the file `dir`: every reading is checked.
+    let s = Setup::new(
+        &[
+            ("dir:1:x/.env", "TOKEN=abc\nTOKEN=def\n"),
+            ("src/a.rs", "// TOKEN\n"),
+        ],
+        &["src/**"],
+    );
+
+    let found = s.call("grep", json!({ "pattern": "TOKEN" })).await;
+
+    assert!(found.output.contains("src/a.rs"), "{}", found.output);
+    assert!(
+        !found.output.contains("abc") && !found.output.contains("def"),
+        "{}",
+        found.output
+    );
+}

@@ -44,6 +44,23 @@ fn find_line_number(line: &str) -> Option<usize> {
     None
 }
 
+/// Every prefix of `line` that ends just before a `:<digits>:`: the paths it could name.
+fn candidate_paths(line: &str) -> Vec<&str> {
+    let mut paths = Vec::new();
+    for (i, b) in line.bytes().enumerate() {
+        if b != b':' {
+            continue;
+        }
+        if let Some(next) = line[i + 1..].find(':') {
+            let num = &line[i + 1..i + 1 + next];
+            if !num.is_empty() && num.bytes().all(|b| b.is_ascii_digit()) {
+                paths.push(&line[..i]);
+            }
+        }
+    }
+    paths
+}
+
 pub fn parameters() -> Value {
     json!({
         "type": "object",
@@ -102,8 +119,13 @@ pub async fn run(args: &Value, ctx: &ToolContext) -> ToolResult {
                 .map(normalize_line)
                 // belt and braces: nothing from inside .git, however it got matched
                 .filter(|l| !l.starts_with(".git/") && !l.contains("/.git/"))
-                // nor from a secret file: the model never sees what's in `.env`
-                .filter(|l| !ctx.guard.is_secret(l.split(':').next().unwrap_or_default()))
+                // nor from a secret file: the model never sees what's in `.env`. A path can hold `:`
+                // (even `:12:`), so every way to read the line is checked, and a line with no line
+                // number is dropped.
+                .filter(|l| {
+                    let paths = candidate_paths(l);
+                    !paths.is_empty() && !paths.iter().any(|path| ctx.guard.is_secret(path))
+                })
                 .collect();
             if lines.is_empty() {
                 return ToolResult::ok("no matches");

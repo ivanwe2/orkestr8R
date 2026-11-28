@@ -55,19 +55,18 @@ pub async fn run(ctx: &CliContext, args: AskArgs) -> anyhow::Result<CommandResul
     }
 
     let loaded = load_config(ctx)?;
-    // Secret files never go to the model: judged by the path inside the repo (links followed), or
-    // by the name for a file outside it.
+    // Secret files never go to the model. Judged by every name the file goes by: as typed, and
+    // where it really is (links followed), relative to the repo or, outside it, the full path.
     let secrets =
         crate::secrets::Secrets::new(&loaded.config.secrets.deny, &loaded.config.secrets.allow)?;
     let root = root.and_then(|root| dunce::canonicalize(root).ok());
     for (name, file) in &files {
         let real = dunce::canonicalize(file).unwrap_or_else(|_| file.clone());
-        let rel = root
-            .as_ref()
-            .and_then(|root| real.strip_prefix(root).ok())
-            .map(|rel| rel.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_else(|| name.clone());
-        if secrets.is_secret(&rel) {
+        let real_name = match root.as_ref().and_then(|root| real.strip_prefix(root).ok()) {
+            Some(rel) => rel.to_string_lossy().replace('\\', "/"),
+            None => real.to_string_lossy().replace('\\', "/"),
+        };
+        if secrets.is_secret(name) || secrets.is_secret(&real_name) {
             bail!("refused: {name} is a secret file: ork doesn't show secrets to the model");
         }
     }
