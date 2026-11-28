@@ -94,6 +94,7 @@ fn report(job: &str, status: JobStatus, files: usize) -> Report {
             output: 1,
         },
         model: "qwen-27b".into(),
+        role: "grunt".into(),
         branch: format!("ork/{job}"),
         open_questions: vec![],
         reason: None,

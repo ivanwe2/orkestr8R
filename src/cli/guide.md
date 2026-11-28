@@ -71,6 +71,10 @@ to `ork run - --json`: no quoting trouble with long goals (PowerShell), and no t
 - `--readonly` (`"mode": "readonly"`): an investigation. No writing tools; the answer comes back in
   the summary, and `files_read` says what it looked at. Checks are optional. Its worktree is
   removed when it ends: there's nothing to apply or discard.
+- `--role NAME`: which model runs it, a role from `ork models` (default `grunt`). Use a bigger or
+  paid role for harder orders, a small one for trivial ones.
+- `--kind KIND`: `test`, `fix`, `feature`, `refactor`, `docs`, `chore` or `investigate`; it feeds
+  the scoreboard that compares models per kind, so set it.
 - Limits: `max_turns` 40, `max_repairs` 2, `max_minutes` 20 unless the config or the order says
   otherwise.
 

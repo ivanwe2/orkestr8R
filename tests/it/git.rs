@@ -322,6 +322,7 @@ fn the_job_store_keeps_state_order_and_report() {
             output: 2,
         },
         model: "m".into(),
+        role: "grunt".into(),
         branch: first.branch.clone(),
         open_questions: vec![],
         reason: Some("max_turns".into()),

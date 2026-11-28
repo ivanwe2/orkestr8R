@@ -145,3 +145,61 @@ async fn paths_work_from_a_subdirectory_either_way() {
         "{user}"
     );
 }
+
+#[tokio::test]
+async fn ask_and_doctor_take_a_role() {
+    let a = FakeModelServer::start(Script::new()).await;
+    let b = FakeModelServer::start(
+        Script::new()
+            .text("Sum is at src/calc.rs:2.")
+            .tool_call("ping", serde_json::json!({ "value": "pong" })),
+    )
+    .await;
+    let ws = Workspace::with_config(serde_json::json!({
+        "servers": { "a": { "url": a.base_url() }, "b": { "url": b.base_url() } },
+        "roles": {
+            "grunt": { "server": "a", "model": "model-a" },
+            "goblin": { "server": "b", "model": "model-b" }
+        },
+    }));
+    ws.write(
+        "src/calc.rs",
+        "pub fn sum(a: i32, b: i32) -> i32 { a + b }\n",
+    );
+
+    let out = run_cli(
+        &[
+            "ask",
+            "Where is sum?",
+            "--path",
+            "src/calc.rs",
+            "--role",
+            "goblin",
+        ],
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+    assert_eq!(out.code, exit::OK, "{}", out.stderr);
+
+    let doctor = run_cli(
+        &["doctor", "--role", "goblin", "--json"],
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+    let checks = json_lines(&doctor.stdout).pop().unwrap()["data"]["checks"].clone();
+    let tool_calling = checks
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "tool_calling")
+        .unwrap()
+        .clone();
+    assert_eq!(tool_calling["ok"], true, "{checks}");
+    assert!(
+        a.requests().is_empty(),
+        "nothing went to the grunt's server"
+    );
+    assert!(b.requests().len() >= 2);
+}

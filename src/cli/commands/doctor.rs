@@ -44,14 +44,21 @@ impl Check {
     }
 }
 
-pub async fn run(ctx: &CliContext) -> anyhow::Result<CommandResult> {
+#[derive(Debug, clap::Args)]
+pub struct DoctorArgs {
+    /// The role whose server and tool calling to check (default: grunt)
+    #[arg(long, default_value = "grunt")]
+    pub role: String,
+}
+
+pub async fn run(ctx: &CliContext, args: DoctorArgs) -> anyhow::Result<CommandResult> {
     let mut checks = Vec::new();
 
     let loaded = load_config(ctx);
     let usable = check_config(&loaded, &mut checks);
     checks.push(check_git(ctx).await);
 
-    match usable.map(|config| ModelClient::for_role(config, "grunt", &ctx.env)) {
+    match usable.map(|config| ModelClient::for_role(config, &args.role, &ctx.env)) {
         Some(Ok((mut client, role))) => {
             // Diagnose, don't wait: a down server should show at once, not after the backoff.
             client.retry_delays.clear();

@@ -26,6 +26,8 @@ pub struct RunService<'a> {
     pub model: &'a ModelClient,
     pub config: &'a OrkConfig,
     pub role: &'a RoleConfig,
+    /// The role's name, for the report.
+    pub role_name: &'a str,
     pub env: &'a Env,
     pub events: &'a dyn EventSink,
 }
@@ -161,6 +163,7 @@ impl RunService<'_> {
                 output: outcome.tokens_out,
             },
             model: self.model.model().to_string(),
+            role: self.role_name.to_string(),
             branch: job.branch.clone(),
             open_questions: outcome.open_questions.clone(),
             reason: reason.clone(),

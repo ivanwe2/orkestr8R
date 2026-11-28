@@ -405,3 +405,117 @@ async fn a_run_keeps_a_heartbeat() {
         orkestr8r::orders::JobStatus::Passed
     );
 }
+
+/// Two servers: the grunt on `a`, a goblin on `b`.
+fn two_roles(a: &FakeModelServer, b: &FakeModelServer) -> Workspace {
+    let ws = Workspace::with_config(json!({
+        "servers": { "a": { "url": a.base_url() }, "b": { "url": b.base_url() } },
+        "roles": {
+            "grunt": { "server": "a", "model": "model-a" },
+            "goblin": { "server": "b", "model": "model-b" }
+        },
+        "allow_commands": ["git grep"],
+    }));
+    ws.write("src/calc.rs", CALC);
+    ws.commit("initial");
+    ws
+}
+
+#[tokio::test]
+async fn role_picks_the_model_and_server_that_run_the_order() {
+    let a = FakeModelServer::start(Script::new()).await;
+    let b = FakeModelServer::start(
+        Script::new()
+            .tool_call("edit_file", add_sum())
+            .tool_call("finish", json!({ "summary": "Added Sum" })),
+    )
+    .await;
+    let ws = two_roles(&a, &b);
+
+    let out = run_cli(
+        &run_args(&["--role", "goblin", "--kind", "feature", "--json"]),
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::OK, "{}\n{}", out.stdout, out.stderr);
+    assert!(
+        a.requests().is_empty(),
+        "nothing went to the grunt's server"
+    );
+    assert_eq!(b.requests().len(), 2);
+    let events = json_lines(&out.stdout);
+    assert_eq!(events[0]["role"], "goblin");
+    assert_eq!(events[0]["model"], "model-b");
+    assert_eq!(events.last().unwrap()["report"]["role"], "goblin");
+    let job = events[0]["job"].as_str().unwrap().to_string();
+    let store = JobStore::new(&ws.repo);
+    let state = store.load(&job).unwrap();
+    assert_eq!(
+        (
+            state.role.as_deref(),
+            state.model.as_deref(),
+            state.server.as_deref()
+        ),
+        (Some("goblin"), Some("model-b"), Some("b"))
+    );
+    assert_eq!(
+        store.load_order(&job).unwrap().kind.as_deref(),
+        Some("feature")
+    );
+}
+
+#[tokio::test]
+async fn an_unknown_role_or_kind_is_a_problem_with_the_order() {
+    let a = FakeModelServer::start(Script::new()).await;
+    let b = FakeModelServer::start(Script::new()).await;
+    let ws = two_roles(&a, &b);
+
+    let out = run_cli(
+        &run_args(&["--role", "merc", "--kind", "magic", "--json"]),
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::ERROR);
+    let error = json_lines(&out.stdout).pop().unwrap()["error"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(
+        error.contains("role: \"merc\" isn't in roles (goblin, grunt)"),
+        "{error}"
+    );
+    assert!(
+        error.contains("kind: \"magic\" isn't one of test, fix"),
+        "{error}"
+    );
+    assert!(!ws.repo.join(".ork/jobs").exists(), "no job made");
+}
+
+#[tokio::test]
+async fn a_readonly_order_is_an_investigation_unless_it_says_otherwise() {
+    let server = FakeModelServer::start(
+        Script::new().tool_call("finish", json!({ "summary": "one() at src/calc.rs:1" })),
+    )
+    .await;
+    let ws = workspace(&server);
+
+    let out = run_cli(
+        &["run", "--goal", "Which functions?", "--readonly", "--json"],
+        &ws.repo,
+        ws.env.clone(),
+    )
+    .await;
+
+    assert_eq!(out.code, exit::OK, "{}", out.stderr);
+    let job = json_lines(&out.stdout)[0]["job"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let order = JobStore::new(&ws.repo).load_order(&job).unwrap();
+    assert_eq!(order.kind.as_deref(), Some("investigate"));
+    assert_eq!(order.role, None, "no role named: the grunt runs it");
+}

@@ -38,6 +38,33 @@ pub struct Order {
     pub max_repairs: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_minutes: Option<u32>,
+    /// The role (a name in the config's `roles`) that runs it; `None` → `grunt`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+    /// What kind of work it is, one of [`KINDS`], for the scoreboard; never sent to the model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+}
+
+/// The kinds of order the chief can name (`--kind`): the scoreboard compares models per kind.
+pub const KINDS: [&str; 7] = [
+    "test",
+    "fix",
+    "feature",
+    "refactor",
+    "docs",
+    "chore",
+    "investigate",
+];
+
+/// The role an order runs on when it names none.
+pub const DEFAULT_ROLE: &str = "grunt";
+
+impl Order {
+    /// The role it runs on: its own, else [`DEFAULT_ROLE`].
+    pub fn role_name(&self) -> &str {
+        self.role.as_deref().unwrap_or(DEFAULT_ROLE)
+    }
 }
 
 /// Where a job is. `running` until the run ends; `applied` / `discarded` after the chief decides.
@@ -88,6 +115,14 @@ pub fn validate(order: &Order, root: &Path, policy: &CommandPolicy) -> Vec<Strin
                     .to_string(),
             );
         }
+    }
+    if let Some(kind) = &order.kind
+        && !KINDS.contains(&kind.as_str())
+    {
+        problems.push(format!(
+            "kind: \"{kind}\" isn't one of {}",
+            KINDS.join(", ")
+        ));
     }
     for pattern in &order.write_scope {
         if globset::Glob::new(pattern).is_err() {
@@ -159,6 +194,9 @@ pub struct Report {
     pub failing_before: Vec<String>,
     pub tokens: TokenCount,
     pub model: String,
+    /// The role that ran it (`""` in reports from before roles: `grunt`).
+    #[serde(default)]
+    pub role: String,
     pub branch: String,
     pub open_questions: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
