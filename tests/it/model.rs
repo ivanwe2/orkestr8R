@@ -344,3 +344,60 @@ async fn a_reply_without_choices_is_an_error() {
 
     assert!(format!("{err:#}").contains("no choices"), "{err:#}");
 }
+
+fn client_for(url: &str, thinking: Option<bool>, extra_body: Option<Value>) -> ModelClient {
+    let server = ServerConfig {
+        url: url.into(),
+        ..Default::default()
+    };
+    let role = RoleConfig {
+        model: "m".into(),
+        thinking,
+        extra_body,
+        ..Default::default()
+    };
+    ModelClient::new(&server, &role, None, Duration::from_secs(5)).unwrap()
+}
+
+#[test]
+fn the_thinking_switch_speaks_each_servers_language() {
+    let local = |thinking| {
+        client_for("http://127.0.0.1:8080/v1", thinking, None).request_body(&request(false))
+    };
+    assert_eq!(
+        local(Some(false))["chat_template_kwargs"],
+        json!({ "enable_thinking": false })
+    );
+    assert_eq!(
+        local(Some(true))["chat_template_kwargs"],
+        json!({ "enable_thinking": true })
+    );
+    let unset = local(None);
+    assert!(unset.get("chat_template_kwargs").is_none() && unset.get("reasoning").is_none());
+
+    let router = |thinking| {
+        client_for("https://openrouter.ai/api/v1", thinking, None).request_body(&request(false))
+    };
+    assert_eq!(
+        router(Some(false))["reasoning"],
+        json!({ "effort": "none" })
+    );
+    assert_eq!(router(Some(true))["reasoning"], json!({ "enabled": true }));
+    assert!(router(Some(false)).get("chat_template_kwargs").is_none());
+}
+
+#[test]
+fn extra_body_is_merged_last_and_wins() {
+    let client = client_for(
+        "http://127.0.0.1:8080/v1",
+        Some(false),
+        Some(json!({ "chat_template_kwargs": { "enable_thinking": true, "x": 1 }, "top_k": 20 })),
+    );
+    let body = client.request_body(&request(false));
+    assert_eq!(body["top_k"], 20);
+    assert_eq!(
+        body["chat_template_kwargs"],
+        json!({ "enable_thinking": true, "x": 1 })
+    );
+    assert_eq!(body["model"], "m", "the rest of the body stands");
+}

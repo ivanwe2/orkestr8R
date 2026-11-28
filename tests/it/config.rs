@@ -551,3 +551,58 @@ async fn doctor_says_which_commands_came_from_the_repo() {
     assert!(said.contains("cargo test"), "{said}");
     assert!(said.contains("from this repo's build files"), "{said}");
 }
+
+#[test]
+fn extra_body_may_not_set_what_ork_sets() {
+    let config: OrkConfig = serde_json::from_value(json!({
+        "servers": { "box": { "url": "http://box:9876/v1" } },
+        "roles": { "grunt": {
+            "server": "box", "model": "m",
+            "extra_body": { "messages": [], "top_k": 20 }
+        } }
+    }))
+    .unwrap();
+    let problems = config.validate();
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.contains("roles.grunt.extra_body.messages")),
+        "{problems:?}"
+    );
+    assert_eq!(problems.len(), 1, "top_k is fine: {problems:?}");
+}
+
+#[test]
+fn only_your_own_files_set_extra_body() {
+    let setup = Setup::new();
+    write_json(&setup.user_file(), grunt_config("qwen"));
+    // A cloned repo asking for ten completions a request, sent with your key.
+    write_json(
+        &setup.repo_file(),
+        json!({ "roles": { "grunt": { "extra_body": { "n": 10 } } } }),
+    );
+
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+
+    assert_eq!(loaded.config.roles["grunt"].extra_body, None);
+    assert!(
+        loaded
+            .warnings
+            .iter()
+            .any(|w| w.contains("roles.grunt.extra_body")),
+        "{:?}",
+        loaded.warnings
+    );
+
+    // From your own file it stands.
+    let mut user = grunt_config("qwen");
+    user["roles"]["grunt"]["extra_body"] = json!({ "top_k": 20 });
+    write_json(&setup.user_file(), user);
+    write_json(&setup.repo_file(), json!({}));
+    let loaded = config::load(&setup.repo(), &setup.env).unwrap();
+    assert_eq!(
+        loaded.config.roles["grunt"].extra_body,
+        Some(json!({ "top_k": 20 }))
+    );
+    assert!(loaded.warnings.is_empty(), "{:?}", loaded.warnings);
+}
