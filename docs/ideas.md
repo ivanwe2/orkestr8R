@@ -14,9 +14,9 @@ they don't come back without it.
 
 | Idea | Assessment | Where |
 |---|---|---|
-| **A ranking of which model does which tasks at what level**, the "self-improving" part | Yes. The data mostly exists: every job records model, turns, repairs, checks, time, tokens, cost, and whether the chief applied or discarded the work. A scoreboard first, routing suggestions next, automatic routing last. It's the harness learning which model to trust with what (the models don't change). Needs volume (show n; nothing under ~10 jobs per cell), a task kind the chief sets on the order, and at least two models. Escalation stays a fixed rule (docs/swarm.md). | #50, v0.2 |
-| **Several endpoints for tasks** (OpenRouter, the local box, another Qwen), so the orchestrator delegates to many | Half there: the config holds several servers and roles; v0.1 always uses `grunt`. Needs a role or tier per order (the tiers in docs/swarm.md: goblin, grunt, mercenary) and background jobs to run them at once. | #49, v0.2 |
-| **Parallel execution** | Worth it, but one GPU splits its speed across jobs unless the server has parallel slots, so it's about scheduling: a queue with per-server limits, stacked orders, overlap warnings. | #51, after #27 |
+| **A ranking of which model does which tasks at what level**, the "self-improving" part | Yes. The data mostly exists: every job records model, turns, repairs, checks, time, tokens, cost, and whether the chief applied or discarded the work. A scoreboard first, routing suggestions next, automatic routing last. It's the harness learning which model to trust with what (the models don't change). Needs volume (show n; nothing under ~10 jobs per cell), a task kind the chief sets on the order, and at least two models. Escalation stays a fixed rule (docs/swarm.md). | #50, v0.2 T13 (plan-v0.2) |
+| **Several endpoints for tasks** (OpenRouter, the local box, another Qwen), so the orchestrator delegates to many | Half there: the config holds several servers and roles; v0.1 always uses `grunt`. Needs a role or tier per order (the tiers in docs/swarm.md: goblin, grunt, mercenary) and background jobs to run them at once. | #49, v0.2 T01 (plan-v0.2) |
+| **Parallel execution** | Worth it, but one GPU splits its speed across jobs unless the server has parallel slots, so it's about scheduling: a queue with per-server limits, stacked orders, overlap warnings. | #51, v0.2 T09 + T11 (plan-v0.2) |
 | **Is "harness" the right word?** ("harness delegator"?) | Decided: "a delegation harness"; see [Naming](#naming) below. | done: README, vision, repo description |
 
 ### 2026-11-26
@@ -38,12 +38,12 @@ environment, not in the order, check, report loop. It hadn't run a write order y
 
 | Its suggestion | Assessment | Where |
 |---|---|---|
-| Start from the uncommitted working tree; apply onto a dirty tree | The top one. Its plan had two holes: `git stash create` skips untracked files (the new code you want tests for), so snapshot with a temporary index; and apply must lay on the job's own diff, not merge a branch built on the snapshot. | #47, v0.2 |
+| Start from the uncommitted working tree; apply onto a dirty tree | The top one. Its plan had two holes: `git stash create` skips untracked files (the new code you want tests for), so snapshot with a temporary index; and apply must lay on the job's own diff, not merge a branch built on the snapshot. | #47, v0.2 T10 (plan-v0.2) |
 | The allow-list as a one-liner for the human (`ork allow`); doctor reading `package.json` | Mostly fixed: a repo's commands now come from its build files (#39). The refusal already names the command and lists what's allowed. `ork allow CMD --repo` maybe later: editing `ork.json` is meant to be the human's control. | #39 (done) |
 | Test the checks before spending model time | Running every check first doubles check time on every job. Instead: resolve the check programs up front (cheap), and on failure re-run the checks on the base commit to tell "already failing" from "the grunt broke it"; `--baseline` opt-in. | done (#45): the program check and the base-commit re-run; `--baseline` not built until needed |
-| Worktree setup: link `node_modules` and `.env`, run setup commands | Real (it works today only because worktrees sit inside the repo). Linking `.env` hands secrets to the model, so the guard must refuse secret files first. | #48, v0.2 |
-| `ork wait JOB… [--any] [--timeout]` | Fine; part of v0.2's background jobs. Claude Code's background shells already notify. | #27 |
-| A queue with per-server concurrency; stacked orders (`--base JOB`); overlap warnings | Agreed, after background jobs. | #51 |
+| Worktree setup: link `node_modules` and `.env`, run setup commands | Real (it works today only because worktrees sit inside the repo). Linking `.env` hands secrets to the model, so the guard must refuse secret files first. | #48, v0.2 T05 + T12 (plan-v0.2) |
+| `ork wait JOB… [--any] [--timeout]` | Fine; part of v0.2's background jobs. Claude Code's background shells already notify. | v0.2 T08 (plan-v0.2) |
+| A queue with per-server concurrency; stacked orders (`--base JOB`); overlap warnings | Agreed, after background jobs. | #51, v0.2 T09 + T11 |
 | Wall time and tool-call counts in the report; `files_read` for read-only | Yes, cheap. | done (#40) |
 | Tell the grunt to describe the code, not its comments; cite line numbers | Yes, a prompt change. | done (#44) |
 | A short file tree up front | It exists, but only two levels deep, which is why it guessed `Pages.ts`. Fill the 200-entry budget instead. | done (#43) |
@@ -60,9 +60,10 @@ environment, not in the order, check, report loop. It hadn't run a write order y
 | `/run` in the TUI: write and start an order from the dashboard | Needs runs that don't block the TUI and survive quitting it (#27, #21). The chief starting orders is the main path. | not filed |
 | `ork allow CMD [--repo]` | Only if editing `ork.json` turns out to be a real hurdle. | not filed |
 
-Tracked elsewhere: the web UI (#31), v0.2 MCP and background jobs (#27), a dead run stays
-"running" (#21, fixed with a heartbeat), a thinking switch per role (#33), a token budget per order (#24), shrinking big
-tool arguments (#23), sandboxing (#20), Rust checks on Windows without MSVC (#19).
+Tracked elsewhere: the web UI (#31, later), MCP (#27, v0.3; background jobs moved to v0.2), a dead
+run stays "running" (#21, fixed with a heartbeat), a thinking switch per role (#33, v0.2 T03), a
+token budget per order (#24, v0.2 T02), shrinking big tool arguments (#23, v0.2 T04), sandboxing
+(#20), Rust checks on Windows without MSVC (#19).
 
 ## Naming
 
@@ -83,3 +84,30 @@ hands it orders; it picks the model, checks the result, reports back).
 
 **Decided 2026-11-27** (Ivan: "update the readme and description"): README, vision and the repo
 description say "a delegation harness".
+
+## MCP, for v0.3 (research, 2026-11-28)
+
+What `ork mcp` will build on, checked before v0.2 was planned (sources: the rmcp repo and
+crates.io, modelcontextprotocol.io, code.claude.com/docs/en/mcp.md, each client's docs):
+
+- **rmcp 3.12.0** (2026-11-26), Rust 1.88+, edition 2024. A stdio server needs the features
+  `server`, `macros`, `transport-io` (stdio isn't a default feature); no HTTP crates. Tools:
+  `#[tool_router]` + `#[tool]`, arguments as `Parameters<T>` (`T: Deserialize + JsonSchema`);
+  `X.serve(stdio()).await?.waiting().await?`; logs to stderr.
+- **Tasks** are an extension since spec 2026-07-28 (`io.modelcontextprotocol/tasks`): the client
+  sends a normal `tools/call`, the server may answer with a task; the client polls `tasks/get` and
+  cancels with `tasks/cancel` (`tasks/result` and `tasks/list` were removed). rmcp has them in
+  `rmcp::task_manager`. **Its task TTL defaults to 5 minutes and fails longer tasks**: use
+  `TaskOptions::new().with_ttl_ms(None)`. Tasks live in memory, so they die with the stdio process:
+  `ork_delegate` should submit a real background job (v0.2's `--detach`) and the task only wait on it.
+- **Clients:** only Claude Code supports Tasks (v2.1.304+, interactive sessions); OpenCode, Codex
+  CLI and Gemini CLI don't yet (open issues). Without Tasks, `ork_delegate` returns the job id and
+  `ork_wait(timeout ≤ 50 s)` polls, as docs/cli.md already plans.
+- **Time limits:** Claude Code has no hard limit by default (`MCP_TOOL_TIMEOUT` unset ≈ 28 h), an
+  idle limit of 30 minutes for stdio, and moves a call still running after 2 minutes to the
+  background. Codex's default tool timeout is 60 s (`tool_timeout_sec`), Gemini CLI's 10 minutes.
+  So short waits plus background jobs, never one 20-minute call.
+- **Registration** (for `ork init` / `ork skill`-style setup): Claude Code `claude mcp add -s user ork
+  -- ork mcp` or `.mcp.json` `{"mcpServers": {"ork": {"command": "ork", "args": ["mcp"]}}}`;
+  OpenCode `opencode.json` `mcp.servers.ork` (`type: local`, `command: ["ork", "mcp"]`); Codex
+  `~/.codex/config.toml` `[mcp_servers.ork]`; Gemini CLI `settings.json` `mcpServers.ork`.

@@ -79,7 +79,7 @@ The patterns that worked carry over:
 
 | Iteration | What |
 |---|---|
-| 1 | One grunt, one repo, coding tasks. `ork run` / `ask` / `jobs` / `apply`, checks and repairs, `ork mcp`, `ork guide` and the skill. docs/iteration-1.md |
+| 1 | One grunt, one repo, coding tasks. `ork run` / `ask` / `jobs` / `apply`, checks and repairs, `ork guide` and the skill (v0.1, released); background jobs, a model per order, a per-server queue, the scoreboard (v0.2, docs/plan-v0.2.md); `ork mcp` and the eval (v0.3). docs/iteration-1.md |
 | 2 | `ork serve`: jobs outlive the chief's session; the war room web UI; ntfy notifications; model roles with the OpenRouter preset (mercenaries); grunts run by other harnesses over ACP (e.g. `opencode acp`) |
 | 3 | Swarm: plans (orders with dependencies), parallel grunts within each server's capacity, model per order by tier with escalation, independent verifiers, a merge queue. docs/swarm.md |
 | 4 | Beyond coding: grunts with MCP tools for other kinds of work; grunts on other machines (Tailscale); maybe orkestr8R as an A2A agent other agents can hire |
