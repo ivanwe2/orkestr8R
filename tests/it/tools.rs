@@ -790,3 +790,30 @@ fn the_first_messages_tree_goes_as_deep_as_fits() {
         "deeper levels show a count:\n{tree}"
     );
 }
+
+#[tokio::test]
+async fn a_stub_from_the_history_isnt_written_as_a_files_content() {
+    let s = Setup::new(&[("src/a.rs", "fn a() {}\n")], &["src/**"]);
+    let stub = "[3000 chars removed from the history to save context]";
+
+    let written = s
+        .call("write_file", json!({ "path": "src/b.rs", "content": stub }))
+        .await;
+    let edited = s
+        .call(
+            "edit_file",
+            json!({ "path": "src/a.rs", "old": "fn a() {}", "new": stub }),
+        )
+        .await;
+
+    for result in [written, edited] {
+        assert!(!result.ok);
+        assert!(
+            result.output.contains("placeholder from your history"),
+            "{}",
+            result.output
+        );
+    }
+    assert!(!s.repo.path.join("src/b.rs").exists());
+    assert_eq!(s.repo.read("src/a.rs"), "fn a() {}\n");
+}
