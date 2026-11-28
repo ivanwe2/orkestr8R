@@ -40,6 +40,12 @@ pub struct RoleConfig {
     pub context_tokens: u32,
     pub temperature: f64,
     pub max_output_tokens: u32,
+    /// A reasoning model's thinking: on, off, or `None` (the server's default).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking: Option<bool>,
+    /// Merged into every request body last: what a server spells its own way.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra_body: Option<Value>,
 }
 
 impl Default for RoleConfig {
@@ -50,6 +56,8 @@ impl Default for RoleConfig {
             context_tokens: 32_768,
             temperature: 0.2,
             max_output_tokens: 8_192,
+            thinking: None,
+            extra_body: None,
         }
     }
 }
@@ -351,6 +359,19 @@ impl OrkConfig {
             );
             if role.temperature.is_nan() || role.temperature < 0.0 {
                 problems.push(format!("{path}.temperature: must be 0 or more"));
+            }
+            match &role.extra_body {
+                None => {}
+                Some(Value::Object(extra)) => {
+                    for key in ["model", "messages", "tools", "tool_choice", "stream"] {
+                        if extra.contains_key(key) {
+                            problems.push(format!(
+                                "{path}.extra_body.{key}: ork sets that itself; leave it out"
+                            ));
+                        }
+                    }
+                }
+                Some(_) => problems.push(format!("{path}.extra_body: must be an object")),
             }
         }
         for (name, server) in &self.servers {

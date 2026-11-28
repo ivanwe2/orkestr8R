@@ -551,3 +551,23 @@ async fn doctor_says_which_commands_came_from_the_repo() {
     assert!(said.contains("cargo test"), "{said}");
     assert!(said.contains("from this repo's build files"), "{said}");
 }
+
+#[test]
+fn extra_body_may_not_set_what_ork_sets() {
+    let config: OrkConfig = serde_json::from_value(json!({
+        "servers": { "box": { "url": "http://box:9876/v1" } },
+        "roles": { "grunt": {
+            "server": "box", "model": "m",
+            "extra_body": { "messages": [], "top_k": 20 }
+        } }
+    }))
+    .unwrap();
+    let problems = config.validate();
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.contains("roles.grunt.extra_body.messages")),
+        "{problems:?}"
+    );
+    assert_eq!(problems.len(), 1, "top_k is fine: {problems:?}");
+}

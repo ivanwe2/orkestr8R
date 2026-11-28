@@ -519,3 +519,30 @@ async fn a_readonly_order_is_an_investigation_unless_it_says_otherwise() {
     assert_eq!(order.kind.as_deref(), Some("investigate"));
     assert_eq!(order.role, None, "no role named: the grunt runs it");
 }
+
+#[tokio::test]
+async fn a_role_with_thinking_off_says_so_in_every_request() {
+    let server = FakeModelServer::start(
+        Script::new()
+            .tool_call("edit_file", add_sum())
+            .tool_call("finish", json!({ "summary": "Added Sum" })),
+    )
+    .await;
+    let ws = Workspace::with_config(json!({
+        "servers": { "box": { "url": server.base_url() } },
+        "roles": { "grunt": { "server": "box", "model": "fake-model", "thinking": false } },
+        "allow_commands": ["git grep"],
+    }));
+    ws.write("src/calc.rs", CALC);
+    ws.commit("initial");
+
+    let out = run_cli(&run_args(&["--json"]), &ws.repo, ws.env.clone()).await;
+
+    assert_eq!(out.code, exit::OK, "{}", out.stderr);
+    for request in server.requests() {
+        assert_eq!(
+            request["chat_template_kwargs"],
+            json!({ "enable_thinking": false })
+        );
+    }
+}

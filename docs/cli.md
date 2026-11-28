@@ -178,6 +178,40 @@ Aim for under ~400 tokens: this is what the chief reads instead of the work.
 - A read-only job's worktree and branch are removed when it ends: `ork apply` and `ork diff`
   refuse it (it changed nothing), and the TUI shows it as answered, not waiting on you.
 
+## Config: ork.json
+
+The user file (`%APPDATA%\orkestr8r\ork.json` on Windows, else `$XDG_CONFIG_HOME/orkestr8r/ork.json`
+or `~/.config/orkestr8r/ork.json`), then the repo's `ork.json`, each key overriding the one before
+(`ORK_CONFIG` replaces both). `ork init` writes one; every key is optional except a `grunt` role.
+
+```json
+{
+  "servers": {
+    "box": { "url": "http://gpu-box:9876/v1", "key_env": "LLAMA_API_KEY" },
+    "router": { "url": "https://openrouter.ai/api/v1", "key_env": "OPENROUTER_API_KEY" }
+  },
+  "roles": {
+    "grunt": { "server": "box", "model": "qwen3-coder", "context_tokens": 65536, "thinking": false },
+    "mercenary": { "server": "router", "model": "deepseek/deepseek-v4" }
+  },
+  "allow_commands": ["npm run test", "npm run lint"],
+  "defaults": { "max_turns": 40, "max_repairs": 2, "max_minutes": 20, "max_tokens": 400000 }
+}
+```
+
+- `servers.<name>`: `url` (OpenAI-compatible, ending in `/v1`); `key_env`, the variable holding the
+  API key (only from the user file: a repo can't send your key elsewhere).
+- `roles.<name>`: `server`, `model`; `context_tokens` (32768), `temperature` (0.2),
+  `max_output_tokens` (8192).
+  - `thinking`: `true`/`false` turns a reasoning model's thinking on or off; left out, the server's
+    default. OpenRouter gets `reasoning: {enabled: true}` / `{effort: "none"}` (models whose
+    reasoning is mandatory reject `none`); llama.cpp, llama-swap, vLLM and SGLang get
+    `chat_template_kwargs: {enable_thinking}`.
+  - `extra_body`: an object merged into every request last, for what a server spells its own way
+    (not `model`, `messages`, `tools`, `tool_choice` or `stream`).
+- `allow_commands`: what checks and the grunt may run (see The order).
+- `defaults`: the limits an order doesn't set; `max_tokens` has no default.
+
 ## MCP tools
 
 Thin adapters over the same core. Six tools, because every tool description costs the chief
